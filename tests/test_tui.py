@@ -15,6 +15,7 @@ from aio.tui.app import (
     complete_input,
     complete_slash_command,
     execute_line,
+    suggest_input,
 )
 
 
@@ -102,6 +103,22 @@ def test_complete_input_config_key():
 def test_complete_input_config_value_hint():
     out = complete_input("\\config set safety_level st", [])
     assert out == "\\config set safety_level strict "
+
+
+def test_suggest_input_for_root_command():
+    out = suggest_input("\\co", [])
+    assert "config" in out
+
+
+def test_suggest_input_for_tool_name():
+    out = suggest_input("\\tool fs.", ["fs.search", "fs.read", "shell.exec"])
+    assert "fs.search" in out
+    assert "fs.read" in out
+
+
+def test_suggest_input_for_config_value():
+    out = suggest_input("\\config set safety_level ", [])
+    assert "strict" in out
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

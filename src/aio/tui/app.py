@@ -286,7 +286,7 @@ class TerminalUI:
         self._draw(y, 0, divider_char * max(1, width - 1), width - 1, self._style(2))
         y += 1
 
-        bottom_reserved = 2
+        bottom_reserved = 3
         output_height = max(1, height - y - bottom_reserved)
 
         wrapped: list[str] = []
@@ -296,6 +296,13 @@ class TerminalUI:
         visible = wrapped[-output_height:]
         for idx, line in enumerate(visible):
             self._draw(y + idx, 0, line, width - 1)
+
+        if self.pending_approval_raw is not None:
+            hint_text = "approval> type y/yes to approve, anything else to cancel"
+        else:
+            suggestions = suggest_input(self.input_buffer, self.ctx.registry.list_tools())
+            hint_text = f"hints> {', '.join(suggestions)}" if suggestions else "hints> (none)"
+        self._draw(height - 3, 0, hint_text.ljust(max(0, width - 1)), width - 1, self._style(4))
 
         status = (
             f" provider={self.ctx.config.model_provider}  "
@@ -566,6 +573,54 @@ def complete_input(buffer: str, tool_names: list[str]) -> str:
         return buffer
 
     return buffer
+
+
+def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[str]:
+    if not buffer.startswith("\\"):
+        return []
+    body = buffer[1:]
+    if body == "":
+        return SLASH_COMMANDS[:limit]
+    if " " not in body:
+        return _match_candidates(body, SLASH_COMMANDS)[:limit]
+
+    try:
+        parts = shlex.split(body)
+    except ValueError:
+        return []
+    if not parts:
+        return []
+
+    cmd = parts[0]
+    trailing_space = body.endswith(" ")
+
+    if cmd == "tool":
+        if len(parts) == 1 and trailing_space:
+            return tool_names[:limit]
+        if len(parts) == 2 and not trailing_space:
+            return _match_candidates(parts[1], tool_names)[:limit]
+        return []
+
+    if cmd == "config":
+        if len(parts) == 1 and trailing_space:
+            return ["show", "set"][:limit]
+        if len(parts) == 2 and not trailing_space:
+            return _match_candidates(parts[1], ["show", "set"])[:limit]
+        if len(parts) == 2 and trailing_space and parts[1] == "set":
+            return CONFIG_KEYS[:limit]
+        if len(parts) == 3 and parts[1] == "set" and not trailing_space:
+            return _match_candidates(parts[2], CONFIG_KEYS)[:limit]
+        if len(parts) == 3 and parts[1] == "set" and trailing_space:
+            return CONFIG_VALUE_HINTS.get(parts[2], [])[:limit]
+        if len(parts) == 4 and parts[1] == "set" and not trailing_space:
+            return _match_candidates(parts[3], CONFIG_VALUE_HINTS.get(parts[2], []))[:limit]
+        return []
+
+    return []
+
+
+def _match_candidates(prefix: str, candidates: list[str]) -> list[str]:
+    return [item for item in candidates if item.startswith(prefix)]
 
 
 def _complete_token(
