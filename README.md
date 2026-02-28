@@ -96,6 +96,14 @@ Set in `.aio/config.yaml`:
 - `confirm`: placeholder for interactive approval flow
 - `strict`: blocks shell tools
 
+## Tool validation
+
+Tool calls are schema-validated before execution:
+
+- required args are enforced
+- unknown args are rejected
+- argument types are validated
+
 ## Next steps
 
 - Replace mock LLM client with real provider adapters.

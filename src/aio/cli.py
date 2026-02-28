@@ -11,6 +11,7 @@ from aio.llm.router import get_client
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
+from aio.utils.errors import ToolValidationError
 from aio.workflows.runner import run_workflow
 
 
@@ -112,12 +113,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "tool" and args.tool_cmd == "run":
         registry = ToolRegistry()
-        kwargs = _parse_kv(args.arg)
+        try:
+            kwargs = _parse_kv(args.arg)
+        except ValueError as exc:
+            print(exc)
+            return 1
         blocked, reason = should_block_tool(config.safety_level, args.name, args.approve_risky)
         if blocked:
             print(reason)
             return 1
-        result = registry.run(args.name, **kwargs)
+        try:
+            result = registry.run(args.name, **kwargs)
+        except ToolValidationError as exc:
+            print(exc)
+            return 1
         print(result)
         logger.log({"cmd": "tool.run", "name": args.name})
         return 0

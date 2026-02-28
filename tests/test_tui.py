@@ -100,6 +100,12 @@ def test_tui_tool_risky_runs_with_approve_flag():
     assert "echo_hi" in out
 
 
+def test_tui_tool_validation_error_is_returned():
+    ctx = _ctx(Config(safety_level="off"))
+    out = execute_line(ctx, "\\tool fs.search root=.")
+    assert "Missing required args" in out
+
+
 def test_tui_agent_risky_requires_approve_in_confirm_mode():
     ctx = _ctx(Config(safety_level="confirm"))
     out = execute_line(ctx, "\\agent hello")

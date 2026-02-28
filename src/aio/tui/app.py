@@ -17,6 +17,7 @@ from aio.config.loader import config_to_dict, load_config, update_config
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
+from aio.utils.errors import ToolValidationError
 from aio.workflows.runner import run_workflow
 
 HELP_TEXT = """Commands:
@@ -451,7 +452,10 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
         blocked, reason = should_block_tool(ctx.config.safety_level, name, approve_risky)
         if blocked:
             return reason
-        result = ctx.registry.run(name, **kwargs)
+        try:
+            result = ctx.registry.run(name, **kwargs)
+        except ToolValidationError as exc:
+            return str(exc)
         ctx.last_response = str(result)
         ctx.logger.log({"cmd": "tool.run", "name": name, "via": "tui"})
         return ctx.last_response
