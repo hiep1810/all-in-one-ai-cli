@@ -7,8 +7,11 @@ from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
 from aio.tui.app import (
+    APPROVAL_REQUIRED_PREFIX,
     CLEAR_SIGNAL,
     TUIContext,
+    _inject_approve_flag,
+    _requires_approval,
     complete_slash_command,
     execute_line,
 )
@@ -95,3 +98,23 @@ def test_tui_tool_risky_runs_with_approve_flag():
     ctx = _ctx(Config(safety_level="confirm"))
     out = execute_line(ctx, "\\tool shell.exec cmd=echo_hi --approve-risky")
     assert "echo_hi" in out
+
+
+def test_tui_agent_risky_requires_approve_in_confirm_mode():
+    ctx = _ctx(Config(safety_level="confirm"))
+    out = execute_line(ctx, "\\agent hello")
+    assert out.startswith(APPROVAL_REQUIRED_PREFIX)
+
+
+def test_requires_approval_detection():
+    assert _requires_approval("Approval required for risky tool: shell.exec")
+    assert not _requires_approval("other message")
+
+
+def test_inject_approve_flag():
+    assert _inject_approve_flag("\\tool shell.exec cmd=echo_hi") == (
+        "\\tool shell.exec cmd=echo_hi --approve-risky"
+    )
+    assert _inject_approve_flag("\\tool shell.exec --approve-risky") == (
+        "\\tool shell.exec --approve-risky"
+    )

@@ -54,6 +54,7 @@ SLASH_COMMANDS = [
     "config",
     "exit",
 ]
+APPROVAL_REQUIRED_PREFIX = "Approval required for risky tool:"
 
 
 class ExitTUI(Exception):
@@ -93,6 +94,7 @@ class TerminalUI:
             command_history=[],
             last_response="",
         )
+        self.pending_approval_raw: str | None = None
 
     def add_output(self, text: str) -> None:
         parts = text.splitlines() or [""]
@@ -121,12 +123,20 @@ class TerminalUI:
         if key == "\n":
             raw = self.input_buffer.strip()
             if raw:
+                if self.pending_approval_raw is not None:
+                    self._handle_approval_response(raw)
+                    self.input_buffer = ""
+                    return
                 self.add_output(f"> {raw}")
                 if raw.startswith("\\"):
                     output = execute_line(self.ctx, raw)
                     if output == CLEAR_SIGNAL:
                         self.lines = []
                         self.add_output("Screen cleared.")
+                    elif _requires_approval(output):
+                        self.pending_approval_raw = raw
+                        self.add_output(output)
+                        self.add_output("Approve risky action? [y/N]")
                     else:
                         self.add_output(output)
                 else:
@@ -311,6 +321,21 @@ class TerminalUI:
         self.ctx.store.append("main", {"role": "assistant", "content": buffer})
         self.ctx.logger.log({"cmd": "ask", "prompt": prompt, "via": "tui"})
 
+    def _handle_approval_response(self, raw: str) -> None:
+        answer = raw.strip().lower()
+        self.add_output(f"> {raw}")
+        pending = self.pending_approval_raw
+        self.pending_approval_raw = None
+        if pending is None:
+            return
+        if answer in {"y", "yes"}:
+            approved = _inject_approve_flag(pending)
+            self.add_output(f"> {approved}")
+            output = execute_line(self.ctx, approved)
+            self.add_output(output)
+            return
+        self.add_output("Cancelled risky action.")
+
 
 def execute_line(ctx: TUIContext, raw: str) -> str:
     if not raw.strip():
@@ -392,6 +417,10 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
         if not goal:
             return "Usage: \\agent <goal> [--approve-risky]"
         result = ctx.executor.run(goal, approve_risky=approve_risky)
+        if isinstance(result, dict):
+            reason = str(result.get("result", ""))
+            if _requires_approval(reason):
+                return reason
         ctx.last_response = json.dumps(result, indent=2)
         ctx.logger.log({"cmd": "agent.run", "goal": goal, "via": "tui"})
         return ctx.last_response
@@ -476,6 +505,18 @@ def complete_slash_command(buffer: str) -> str:
     if len(shared) > len(body):
         return "\\" + shared
     return buffer
+
+
+def _requires_approval(message: str) -> bool:
+    return message.startswith(APPROVAL_REQUIRED_PREFIX)
+
+
+def _inject_approve_flag(raw: str) -> str:
+    if not raw.startswith("\\"):
+        return raw
+    if "--approve-risky" in raw:
+        return raw
+    return f"{raw} --approve-risky"
 
 
 def _copy_to_clipboard(text: str) -> bool:

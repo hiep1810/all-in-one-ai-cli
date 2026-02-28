@@ -80,6 +80,7 @@ Tips:
 
 - Press `Tab` to autocomplete `\\commands`.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
+- In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 
 TUI themes:
 
