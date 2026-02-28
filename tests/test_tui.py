@@ -12,13 +12,15 @@ from aio.tui.app import (
     TUIContext,
     _inject_approve_flag,
     _requires_approval,
-    clear_line_input,
+    clear_to_line_end,
     clear_to_line_start,
     complete_input,
     complete_slash_command,
+    delete_backspace,
     execute_line,
     history_next,
     history_prev,
+    insert_text,
     reset_input_state,
     reverse_search_prev,
     suggest_input,
@@ -188,12 +190,28 @@ def test_reset_input_state_empty_draft():
     assert draft == ""
 
 
-def test_clear_line_input():
-    assert clear_line_input("hello world") == ""
+def test_insert_text_at_cursor():
+    updated, cursor = insert_text("helo", 3, "l")
+    assert updated == "hello"
+    assert cursor == 4
 
 
-def test_clear_to_line_start():
-    assert clear_to_line_start("hello world") == ""
+def test_delete_backspace_at_cursor():
+    updated, cursor = delete_backspace("hello", 3)
+    assert updated == "helo"
+    assert cursor == 2
+
+
+def test_clear_to_line_start_with_cursor():
+    updated, cursor = clear_to_line_start("hello world", 6)
+    assert updated == "world"
+    assert cursor == 0
+
+
+def test_clear_to_line_end_with_cursor():
+    updated, cursor = clear_to_line_end("hello world", 5)
+    assert updated == "hello"
+    assert cursor == 5
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

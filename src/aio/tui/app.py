@@ -90,6 +90,7 @@ class TerminalUI:
     def __init__(self, screen: curses.window):
         self.screen = screen
         self.input_buffer = ""
+        self.cursor_pos = 0
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -142,21 +143,23 @@ class TerminalUI:
                 reset_input_state("")
             )
             self.input_buffer = ""
+            self.cursor_pos = 0
             self.add_output("Input cancelled.")
             return
 
         if key == "\x0b":  # Ctrl+K
-            self.input_buffer = clear_line_input(self.input_buffer)
+            self.input_buffer, self.cursor_pos = clear_to_line_end(self.input_buffer, self.cursor_pos)
             return
 
         if key == "\x15":  # Ctrl+U
-            self.input_buffer = clear_to_line_start(self.input_buffer)
+            self.input_buffer, self.cursor_pos = clear_to_line_start(self.input_buffer, self.cursor_pos)
             return
 
         if key == "\x1b":  # Esc
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state(self.input_buffer)
             )
+            self.cursor_pos = len(self.input_buffer)
             self.add_output("Input state reset.")
             return
 
@@ -166,6 +169,7 @@ class TerminalUI:
                 if self.pending_approval_raw is not None:
                     self._handle_approval_response(raw)
                     self.input_buffer = ""
+                    self.cursor_pos = 0
                     return
                 self.add_output(f"> {raw}")
                 if raw.startswith("\\"):
@@ -182,6 +186,7 @@ class TerminalUI:
                 else:
                     self._handle_chat_input(raw)
             self.input_buffer = ""
+            self.cursor_pos = 0
             self.history_nav_index = None
             self.history_nav_draft = ""
             self.reverse_search_index = None
@@ -198,16 +203,33 @@ class TerminalUI:
             return
 
         if key in ("\x7f", "\b") or key == curses.KEY_BACKSPACE:
-            self.input_buffer = self.input_buffer[:-1]
+            self.input_buffer, self.cursor_pos = delete_backspace(self.input_buffer, self.cursor_pos)
             self.reverse_search_index = None
             return
 
         if key == "\t":
             self.input_buffer = complete_input(self.input_buffer, self.ctx.registry.list_tools())
+            self.cursor_pos = len(self.input_buffer)
             self.reverse_search_index = None
             return
 
         if key == curses.KEY_RESIZE:
+            return
+
+        if key == curses.KEY_LEFT:
+            self.cursor_pos = max(0, self.cursor_pos - 1)
+            return
+
+        if key == curses.KEY_RIGHT:
+            self.cursor_pos = min(len(self.input_buffer), self.cursor_pos + 1)
+            return
+
+        if key == curses.KEY_HOME or key == "\x01":  # Home or Ctrl+A
+            self.cursor_pos = 0
+            return
+
+        if key == curses.KEY_END or key == "\x05":  # End or Ctrl+E
+            self.cursor_pos = len(self.input_buffer)
             return
 
         if key == curses.KEY_UP:
@@ -221,7 +243,7 @@ class TerminalUI:
             return
 
         if isinstance(key, str) and key.isprintable():
-            self.input_buffer += key
+            self.input_buffer, self.cursor_pos = insert_text(self.input_buffer, self.cursor_pos, key)
             self.reverse_search_index = None
 
     def _history_prev(self) -> None:
@@ -231,6 +253,7 @@ class TerminalUI:
             history_nav_draft=self.history_nav_draft,
             input_buffer=self.input_buffer,
         )
+        self.cursor_pos = len(self.input_buffer)
 
     def _history_next(self) -> None:
         self.history_nav_index, self.history_nav_draft, self.input_buffer = history_next(
@@ -239,6 +262,7 @@ class TerminalUI:
             history_nav_draft=self.history_nav_draft,
             input_buffer=self.input_buffer,
         )
+        self.cursor_pos = len(self.input_buffer)
 
     def _reverse_search_prev(self) -> None:
         query = self.input_buffer.strip()
@@ -251,6 +275,7 @@ class TerminalUI:
             return
         self.reverse_search_index = index - 1
         self.input_buffer = match
+        self.cursor_pos = len(match)
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -394,7 +419,8 @@ class TerminalUI:
 
         prompt = f" cmd> {self.input_buffer}"
         self._draw(height - 1, 0, prompt.ljust(max(0, width - 1)), width - 1, self._style(1, bold=True))
-        self.screen.move(height - 1, min(len(prompt), max(0, width - 1)))
+        cursor_x = len(" cmd> ") + self.cursor_pos
+        self.screen.move(height - 1, min(cursor_x, max(0, width - 1)))
         self.screen.refresh()
 
     def _handle_chat_input(self, raw: str) -> None:
@@ -754,13 +780,30 @@ def reset_input_state(input_buffer: str) -> tuple[None, None, None, str]:
     return None, None, None, input_buffer
 
 
-def clear_line_input(_input_buffer: str) -> str:
-    return ""
+def insert_text(input_buffer: str, cursor_pos: int, text: str) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    updated = input_buffer[:cursor_pos] + text + input_buffer[cursor_pos:]
+    return updated, cursor_pos + len(text)
 
 
-def clear_to_line_start(_input_buffer: str) -> str:
-    # Cursor is currently always at line end in this TUI.
-    return ""
+def delete_backspace(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    if cursor_pos == 0:
+        return input_buffer, cursor_pos
+    updated = input_buffer[: cursor_pos - 1] + input_buffer[cursor_pos:]
+    return updated, cursor_pos - 1
+
+
+def clear_to_line_start(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    updated = input_buffer[cursor_pos:]
+    return updated, 0
+
+
+def clear_to_line_end(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    updated = input_buffer[:cursor_pos]
+    return updated, cursor_pos
 
 
 def _complete_token(
