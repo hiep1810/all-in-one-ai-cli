@@ -145,6 +145,14 @@ class TerminalUI:
             self.add_output("Input cancelled.")
             return
 
+        if key == "\x0b":  # Ctrl+K
+            self.input_buffer = clear_line_input(self.input_buffer)
+            return
+
+        if key == "\x15":  # Ctrl+U
+            self.input_buffer = clear_to_line_start(self.input_buffer)
+            return
+
         if key == "\x1b":  # Esc
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state(self.input_buffer)
@@ -744,6 +752,15 @@ def reverse_search_prev(
 
 def reset_input_state(input_buffer: str) -> tuple[None, None, None, str]:
     return None, None, None, input_buffer
+
+
+def clear_line_input(_input_buffer: str) -> str:
+    return ""
+
+
+def clear_to_line_start(_input_buffer: str) -> str:
+    # Cursor is currently always at line end in this TUI.
+    return ""
 
 
 def _complete_token(

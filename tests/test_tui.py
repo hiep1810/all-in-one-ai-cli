@@ -12,6 +12,8 @@ from aio.tui.app import (
     TUIContext,
     _inject_approve_flag,
     _requires_approval,
+    clear_line_input,
+    clear_to_line_start,
     complete_input,
     complete_slash_command,
     execute_line,
@@ -184,6 +186,14 @@ def test_reset_input_state_empty_draft():
     assert reverse_idx is None
     assert history_idx is None
     assert draft == ""
+
+
+def test_clear_line_input():
+    assert clear_line_input("hello world") == ""
+
+
+def test_clear_to_line_start():
+    assert clear_to_line_start("hello world") == ""
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
