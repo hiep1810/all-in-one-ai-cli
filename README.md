@@ -117,6 +117,7 @@ Tips:
 - `\\md mode raw|rendered` toggles between raw markdown text and rendered view.
 - When markdown panel is open, use `Up/Down` (line) and `PgUp/PgDn` (page) to scroll it.
 - Use `Ctrl+O` (or `\\md focus ...`) to switch control between input and markdown panel.
+- If your terminal captures `Ctrl+O`, use `\\md focus markdown` / `\\md focus input`.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

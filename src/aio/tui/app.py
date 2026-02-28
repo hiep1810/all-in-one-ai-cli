@@ -155,12 +155,15 @@ class TerminalUI:
                 return 0
 
     def handle_key(self, key: object) -> None:
-        if key == "\x0f":  # Ctrl+O
+        if _is_ctrl(key, 15):  # Ctrl+O
+            if not self.markdown_path:
+                self.add_output("Open markdown first with \\md open <path>.")
+                return
             self.focus_target = toggle_focus(self.focus_target)
             self.add_output(f"Focus: {self.focus_target}")
             return
 
-        if key == "\x13":  # Ctrl+S
+        if _is_ctrl(key, 19):  # Ctrl+S
             self._toggle_selection_mode()
             return
 
@@ -176,7 +179,7 @@ class TerminalUI:
                 self.markdown_scroll -= 3 if key == curses.KEY_UP else 12
                 return
 
-        if key == "\x03":  # Ctrl+C
+        if _is_ctrl(key, 3):  # Ctrl+C
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state("")
             )
@@ -185,15 +188,15 @@ class TerminalUI:
             self.add_output("Input cancelled.")
             return
 
-        if key == "\x0b":  # Ctrl+K
+        if _is_ctrl(key, 11):  # Ctrl+K
             self.input_buffer, self.cursor_pos = clear_to_line_end(self.input_buffer, self.cursor_pos)
             return
 
-        if key == "\x15":  # Ctrl+U
+        if _is_ctrl(key, 21):  # Ctrl+U
             self.input_buffer, self.cursor_pos = clear_to_line_start(self.input_buffer, self.cursor_pos)
             return
 
-        if key == "\x17":  # Ctrl+W
+        if _is_ctrl(key, 23):  # Ctrl+W
             self.input_buffer, self.cursor_pos = delete_prev_word(self.input_buffer, self.cursor_pos)
             return
 
@@ -238,13 +241,13 @@ class TerminalUI:
             self.reverse_search_index = None
             return
 
-        if key == "\x0c":  # Ctrl+L
+        if _is_ctrl(key, 12):  # Ctrl+L
             self.lines = []
             self.add_output("Screen cleared.")
             self.reverse_search_index = None
             return
 
-        if key == "\x12":  # Ctrl+R
+        if _is_ctrl(key, 18):  # Ctrl+R
             self._reverse_search_prev()
             return
 
@@ -945,6 +948,10 @@ def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[st
 
 def _match_candidates(prefix: str, candidates: list[str]) -> list[str]:
     return [item for item in candidates if item.startswith(prefix)]
+
+
+def _is_ctrl(key: object, code: int) -> bool:
+    return key == chr(code) or key == code
 
 
 def history_prev(

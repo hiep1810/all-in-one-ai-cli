@@ -11,6 +11,7 @@ from aio.tui.app import (
     CLEAR_SIGNAL,
     TUIContext,
     _inject_approve_flag,
+    _is_ctrl,
     _requires_approval,
     clamp_scroll,
     clear_to_line_end,
@@ -283,6 +284,12 @@ def test_selection_text_empty_when_no_selection():
 def test_toggle_focus():
     assert toggle_focus("input") == "markdown"
     assert toggle_focus("markdown") == "input"
+
+
+def test_is_ctrl_accepts_char_and_int():
+    assert _is_ctrl("\x0f", 15)
+    assert _is_ctrl(15, 15)
+    assert not _is_ctrl("x", 15)
 
 
 def test_render_markdown_lines():
