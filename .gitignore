@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Packaging/build
+dist/
+build/
+*.egg-info/
+
+# Runtime/local state
+.aio/logs/
+.aio/sessions/
+.aio/config.yaml
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

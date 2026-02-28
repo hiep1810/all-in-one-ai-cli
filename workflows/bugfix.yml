@@ -1,0 +1,6 @@
+name: bugfix
+steps:
+  - describe failing tests
+  - propose fix
+  - run tests
+  - summarize changes
