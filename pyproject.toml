@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 aio = "aio.cli:main"
+aio-mcp = "aio.mcp.server:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

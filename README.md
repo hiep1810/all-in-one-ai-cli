@@ -53,6 +53,22 @@ Now `aio ask "hello"` will send requests to `POST /v1/chat/completions` on your 
 - `aio workflow run workflows/bugfix.yml`
 - `aio replay <logfile>`
 
+## MCP Server
+
+Run MCP server over stdio:
+
+```bash
+aio-mcp --root .
+```
+
+Available MCP tools:
+
+- `read_file`
+- `read_markdown`
+- `list_files`
+
+Example MCP client config: [mcp.example.json](/Users/hieptt/Documents/New project/all-in-one-ai-cli/mcp.example.json)
+
 ## Terminal UI
 
 Run:

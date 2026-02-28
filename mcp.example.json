@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aio": {
+      "command": "aio-mcp",
+      "args": [
+        "--root",
+        "/Users/hieptt/Documents/New project/all-in-one-ai-cli"
+      ]
+    }
+  }
+}
