@@ -24,6 +24,7 @@ from aio.tui.app import (
     history_next,
     history_prev,
     insert_text,
+    markdown_display_lines,
     render_markdown_lines,
     reset_input_state,
     reverse_search_prev,
@@ -124,6 +125,11 @@ def test_complete_input_md_command():
     assert out == "\\md open "
 
 
+def test_complete_input_md_mode_value():
+    out = complete_input("\\md mode re", [])
+    assert out == "\\md mode rendered "
+
+
 def test_suggest_input_for_root_command():
     out = suggest_input("\\co", [])
     assert "config" in out
@@ -143,6 +149,7 @@ def test_suggest_input_for_config_value():
 def test_suggest_input_for_md_subcommands():
     out = suggest_input("\\md ", [])
     assert "open" in out
+    assert "mode" in out
     assert "clear" in out
 
 
@@ -272,6 +279,14 @@ def test_render_markdown_lines():
     assert "• item" in out
     assert "| quote" in out
     assert "  code" in out
+
+
+def test_markdown_display_lines_modes():
+    text = "# Title\n- item"
+    raw = markdown_display_lines(text, "raw")
+    rendered = markdown_display_lines(text, "rendered")
+    assert raw == ["# Title", "- item"]
+    assert "[TITLE]" in rendered
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

@@ -20,25 +20,26 @@ from aio.tools.registry import ToolRegistry
 from aio.utils.errors import ToolValidationError
 from aio.workflows.runner import run_workflow
 
-HELP_TEXT = """Commands:
-  \\help
-  \\md open <path>
-  \\md clear
-  \\agent <goal> [--approve-risky]
-  \\chat <session> <message>
-  \\tool <name> [k=v ...] [--approve-risky]
-  \\tools
-  \\history [n]
-  \\clear
-  \\save [path]
-  \\copylast
-  \\workflow <path>
-  \\replay <logfile>
-  \\config show
-  \\config set <key> <value>
-  \\exit
+HELP_TEXT = r"""Commands:
+  \help
+  \md open <path>
+  \md mode <raw|rendered>
+  \md clear
+  \agent <goal> [--approve-risky]
+  \chat <session> <message>
+  \tool <name> [k=v ...] [--approve-risky]
+  \tools
+  \history [n]
+  \clear
+  \save [path]
+  \copylast
+  \workflow <path>
+  \replay <logfile>
+  \config show
+  \config set <key> <value>
+  \exit
 Main mode:
-  Type any text without leading "\\" to chat directly with AI.
+  Type any text without leading "\" to chat directly with AI.
 """
 
 CLEAR_SIGNAL = "[[AIO_CLEAR_SCREEN]]"
@@ -98,7 +99,8 @@ class TerminalUI:
         self.selection_anchor: int | None = None
         self.selection_cursor: int | None = None
         self.markdown_path: str | None = None
-        self.markdown_lines: list[str] = []
+        self.markdown_raw_text = ""
+        self.markdown_mode = "rendered"
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -372,12 +374,19 @@ class TerminalUI:
         except ValueError as exc:
             return f"Parse error: {exc}"
         if not tokens or tokens[0] != "md":
-            return "Usage: \\md open <path> | \\md clear"
+            return "Usage: \\md open <path> | \\md mode <raw|rendered> | \\md clear"
 
         if len(tokens) >= 2 and tokens[1] == "clear":
             self.markdown_path = None
-            self.markdown_lines = []
+            self.markdown_raw_text = ""
             return "Markdown panel cleared."
+
+        if len(tokens) >= 3 and tokens[1] == "mode":
+            mode = tokens[2].strip().lower()
+            if mode not in {"raw", "rendered"}:
+                return "Invalid mode. Use: raw | rendered"
+            self.markdown_mode = mode
+            return f"Markdown mode set: {mode}"
 
         if len(tokens) >= 3 and tokens[1] == "open":
             path = Path(" ".join(tokens[2:]))
@@ -385,10 +394,10 @@ class TerminalUI:
                 return f"Markdown file not found: {path}"
             text = path.read_text(encoding="utf-8")
             self.markdown_path = str(path)
-            self.markdown_lines = render_markdown_lines(text)
+            self.markdown_raw_text = text
             return f"Markdown loaded: {path}"
 
-        return "Usage: \\md open <path> | \\md clear"
+        return "Usage: \\md open <path> | \\md mode <raw|rendered> | \\md clear"
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -486,7 +495,8 @@ class TerminalUI:
 
         self.screen.erase()
         height, width = self.screen.getmaxyx()
-        split_markdown = bool(self.markdown_lines) and width >= 80
+        markdown_panel_lines = markdown_display_lines(self.markdown_raw_text, self.markdown_mode)
+        split_markdown = bool(markdown_panel_lines) and width >= 80
         left_width = width if not split_markdown else max(30, (width * 3 // 5))
         right_x = left_width + 1
         right_width = max(0, width - right_x)
@@ -528,12 +538,12 @@ class TerminalUI:
         if split_markdown and right_width > 8:
             for row in range(y - 1, height - 1):
                 self._draw(row, left_width, "│", 1, self._style(2))
-            md_title = "Markdown"
+            md_title = f"Markdown ({self.markdown_mode})"
             if self.markdown_path is not None:
-                md_title = f"Markdown: {Path(self.markdown_path).name}"
+                md_title = f"Markdown ({self.markdown_mode}): {Path(self.markdown_path).name}"
             self._draw(y - 1, right_x, md_title, right_width - 1, self._style(5, bold=True))
             wrapped_md: list[str] = []
-            for line in self.markdown_lines:
+            for line in markdown_panel_lines:
                 wrapped_md.extend(textwrap.wrap(line, width=max(8, right_width - 1)) or [""])
             md_visible = wrapped_md[-output_height:]
             for idx, line in enumerate(md_visible):
@@ -804,9 +814,11 @@ def complete_input(buffer: str, tool_names: list[str]) -> str:
 
     if cmd == "md":
         if len(parts) == 1:
-            return _complete_token(buffer, body, "", ["open", "clear"])
+            return _complete_token(buffer, body, "", ["open", "mode", "clear"])
         if len(parts) == 2 and not trailing_space:
-            return _complete_token(buffer, body, parts[1], ["open", "clear"])
+            return _complete_token(buffer, body, parts[1], ["open", "mode", "clear"])
+        if len(parts) == 3 and parts[1] == "mode" and not trailing_space:
+            return _complete_token(buffer, body, parts[2], ["raw", "rendered"])
         return buffer
 
     if cmd == "config":
@@ -855,9 +867,13 @@ def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[st
 
     if cmd == "md":
         if len(parts) == 1 and trailing_space:
-            return ["open", "clear"][:limit]
+            return ["open", "mode", "clear"][:limit]
         if len(parts) == 2 and not trailing_space:
-            return _match_candidates(parts[1], ["open", "clear"])[:limit]
+            return _match_candidates(parts[1], ["open", "mode", "clear"])[:limit]
+        if len(parts) == 2 and trailing_space and parts[1] == "mode":
+            return ["raw", "rendered"][:limit]
+        if len(parts) == 3 and parts[1] == "mode" and not trailing_space:
+            return _match_candidates(parts[2], ["raw", "rendered"])[:limit]
         return []
 
     if cmd == "config":
@@ -947,6 +963,16 @@ def selection_text(lines: list[str], anchor: int | None, cursor: int | None) -> 
         return ""
     start, end = sel_range
     return "\n".join(lines[start : end + 1])
+
+
+
+
+def markdown_display_lines(raw_text: str, mode: str) -> list[str]:
+    if not raw_text:
+        return []
+    if mode == "raw":
+        return raw_text.splitlines()
+    return render_markdown_lines(raw_text)
 
 
 def cursor_from_click(mouse_x: int, prompt_prefix_len: int, input_len: int) -> int:
