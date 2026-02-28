@@ -11,7 +11,6 @@ from aio.tui.app import (
     TUIContext,
     complete_slash_command,
     execute_line,
-    iter_stream_chunks,
 )
 
 
@@ -84,16 +83,6 @@ def test_complete_slash_command_shared_prefix():
 
 def test_complete_slash_command_noop_for_plain_text():
     assert complete_slash_command("hello") == "hello"
-
-
-def test_stream_chunks_default_size():
-    chunks = iter_stream_chunks("abcdefghijk")
-    assert chunks == ["abcdefgh", "ijk"]
-
-
-def test_stream_chunks_custom_size():
-    chunks = iter_stream_chunks("abcdef", chunk_size=2)
-    assert chunks == ["ab", "cd", "ef"]
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
