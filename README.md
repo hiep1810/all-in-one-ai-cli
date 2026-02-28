@@ -74,6 +74,10 @@ Inside the UI, type commands and press Enter:
 - `\\config set tui_theme matrix`
 - `\\exit`
 
+Tips:
+
+- Press `Tab` to autocomplete `\\commands`.
+
 TUI themes:
 
 - `neon` (default)

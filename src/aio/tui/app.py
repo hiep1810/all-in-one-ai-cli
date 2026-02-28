@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import curses
 import json
+from os.path import commonprefix
 import shlex
 import subprocess
 import textwrap
@@ -37,6 +38,21 @@ Main mode:
 """
 
 CLEAR_SIGNAL = "[[AIO_CLEAR_SCREEN]]"
+SLASH_COMMANDS = [
+    "help",
+    "agent",
+    "chat",
+    "tool",
+    "tools",
+    "history",
+    "clear",
+    "save",
+    "copylast",
+    "workflow",
+    "replay",
+    "config",
+    "exit",
+]
 
 
 class ExitTUI(Exception):
@@ -116,6 +132,10 @@ class TerminalUI:
 
         if key in ("\x7f", "\b") or key == curses.KEY_BACKSPACE:
             self.input_buffer = self.input_buffer[:-1]
+            return
+
+        if key == "\t":
+            self.input_buffer = complete_slash_command(self.input_buffer)
             return
 
         if key == curses.KEY_RESIZE:
@@ -399,6 +419,25 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
         return "Usage: \\config show | \\config set <key> <value>"
 
     return f"Unknown command: {cmd}. Type '\\help'"
+
+
+def complete_slash_command(buffer: str) -> str:
+    if not buffer.startswith("\\"):
+        return buffer
+    body = buffer[1:]
+    if " " in body:
+        return buffer
+
+    matches = [cmd for cmd in SLASH_COMMANDS if cmd.startswith(body)]
+    if not matches:
+        return buffer
+    if len(matches) == 1:
+        return "\\" + matches[0] + " "
+
+    shared = commonprefix(matches)
+    if len(shared) > len(body):
+        return "\\" + shared
+    return buffer
 
 
 def _copy_to_clipboard(text: str) -> bool:

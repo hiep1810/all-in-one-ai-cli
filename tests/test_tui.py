@@ -5,7 +5,7 @@ from aio.config.loader import load_config
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
-from aio.tui.app import CLEAR_SIGNAL, TUIContext, execute_line
+from aio.tui.app import CLEAR_SIGNAL, TUIContext, complete_slash_command, execute_line
 
 
 def _ctx() -> TUIContext:
@@ -65,3 +65,15 @@ def test_tui_save_command(tmp_path: Path):
     assert "Saved transcript" in out
     assert output_file.exists()
     assert "hello world" in output_file.read_text(encoding="utf-8")
+
+
+def test_complete_slash_command_unique_match():
+    assert complete_slash_command("\\wor") == "\\workflow "
+
+
+def test_complete_slash_command_shared_prefix():
+    assert complete_slash_command("\\to") == "\\tool"
+
+
+def test_complete_slash_command_noop_for_plain_text():
+    assert complete_slash_command("hello") == "hello"
