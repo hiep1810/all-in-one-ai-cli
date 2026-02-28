@@ -101,6 +101,7 @@ class TerminalUI:
         self.markdown_path: str | None = None
         self.markdown_raw_text = ""
         self.markdown_mode = "rendered"
+        self.markdown_scroll = 0
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -159,6 +160,14 @@ class TerminalUI:
         if self.selection_mode:
             self._handle_selection_key(key)
             return
+
+        if self.markdown_path is not None:
+            if key in {curses.KEY_NPAGE, curses.KEY_DOWN}:
+                self.markdown_scroll += 3 if key == curses.KEY_DOWN else 12
+                return
+            if key in {curses.KEY_PPAGE, curses.KEY_UP}:
+                self.markdown_scroll -= 3 if key == curses.KEY_UP else 12
+                return
 
         if key == "\x03":  # Ctrl+C
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
@@ -379,6 +388,7 @@ class TerminalUI:
         if len(tokens) >= 2 and tokens[1] == "clear":
             self.markdown_path = None
             self.markdown_raw_text = ""
+            self.markdown_scroll = 0
             return "Markdown panel cleared."
 
         if len(tokens) >= 3 and tokens[1] == "mode":
@@ -395,6 +405,7 @@ class TerminalUI:
             text = path.read_text(encoding="utf-8")
             self.markdown_path = str(path)
             self.markdown_raw_text = text
+            self.markdown_scroll = 0
             return f"Markdown loaded: {path}"
 
         return "Usage: \\md open <path> | \\md mode <raw|rendered> | \\md clear"
@@ -538,14 +549,23 @@ class TerminalUI:
         if split_markdown and right_width > 8:
             for row in range(y - 1, height - 1):
                 self._draw(row, left_width, "│", 1, self._style(2))
-            md_title = f"Markdown ({self.markdown_mode})"
+            md_title = f" MARKDOWN [{self.markdown_mode.upper()}] "
             if self.markdown_path is not None:
-                md_title = f"Markdown ({self.markdown_mode}): {Path(self.markdown_path).name}"
-            self._draw(y - 1, right_x, md_title, right_width - 1, self._style(5, bold=True))
+                md_title = f" MARKDOWN [{self.markdown_mode.upper()}] {Path(self.markdown_path).name} "
+            self._draw(
+                y - 1,
+                right_x,
+                md_title.ljust(max(1, right_width - 1)),
+                right_width - 1,
+                self._style(5, bold=True) | curses.A_REVERSE,
+            )
             wrapped_md: list[str] = []
             for line in markdown_panel_lines:
                 wrapped_md.extend(textwrap.wrap(line, width=max(8, right_width - 1)) or [""])
-            md_visible = wrapped_md[-output_height:]
+            self.markdown_scroll = clamp_scroll(self.markdown_scroll, len(wrapped_md), output_height)
+            start = self.markdown_scroll
+            end = min(len(wrapped_md), start + output_height)
+            md_visible = wrapped_md[start:end]
             for idx, line in enumerate(md_visible):
                 self._draw(y + idx, right_x, line, right_width - 1, self._style(4))
 
@@ -553,6 +573,8 @@ class TerminalUI:
             hint_text = "approval> type y/yes to approve, anything else to cancel"
         elif self.selection_mode:
             hint_text = "selection> Up/Down to select, Ctrl+Y copy, Esc exit"
+        elif self.markdown_path is not None:
+            hint_text = "markdown> Up/Down line scroll, PgUp/PgDn page scroll"
         else:
             suggestions = suggest_input(self.input_buffer, self.ctx.registry.list_tools())
             hint_text = f"hints> {', '.join(suggestions)}" if suggestions else "hints> (none)"
@@ -965,6 +987,11 @@ def selection_text(lines: list[str], anchor: int | None, cursor: int | None) -> 
     return "\n".join(lines[start : end + 1])
 
 
+def clamp_scroll(scroll: int, total: int, window: int) -> int:
+    if total <= 0 or window <= 0:
+        return 0
+    max_scroll = max(0, total - window)
+    return max(0, min(scroll, max_scroll))
 
 
 def markdown_display_lines(raw_text: str, mode: str) -> list[str]:
@@ -993,9 +1020,18 @@ def render_markdown_lines(text: str) -> list[str]:
             continue
         stripped = line.lstrip()
         if stripped.startswith("#"):
+            level = len(stripped) - len(stripped.lstrip("#"))
             title = stripped.lstrip("#").strip().upper()
             if title:
-                lines.append(f"[{title}]")
+                if level <= 1:
+                    banner = "=" * max(14, min(60, len(title) + 10))
+                    lines.append(banner)
+                    lines.append(f"==  {title}  ==")
+                    lines.append(banner)
+                elif level == 2:
+                    lines.append(f"-- {title} --")
+                else:
+                    lines.append(f"[{title}]")
             continue
         if stripped.startswith("- ") or stripped.startswith("* "):
             lines.append(f"• {stripped[2:].strip()}")

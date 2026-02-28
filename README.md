@@ -113,6 +113,7 @@ Tips:
 - `Esc` cancels pending approval/search state and resets input navigation.
 - `\\md open <path>` renders markdown in a side panel next to chat.
 - `\\md mode raw|rendered` toggles between raw markdown text and rendered view.
+- When markdown panel is open, use `Up/Down` (line) and `PgUp/PgDn` (page) to scroll it.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

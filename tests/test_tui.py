@@ -12,6 +12,7 @@ from aio.tui.app import (
     TUIContext,
     _inject_approve_flag,
     _requires_approval,
+    clamp_scroll,
     clear_to_line_end,
     clear_to_line_start,
     complete_input,
@@ -275,7 +276,7 @@ def test_selection_text_empty_when_no_selection():
 def test_render_markdown_lines():
     text = "# Title\n- item\n> quote\n```\ncode\n```"
     out = render_markdown_lines(text)
-    assert "[TITLE]" in out
+    assert "==  TITLE  ==" in out
     assert "• item" in out
     assert "| quote" in out
     assert "  code" in out
@@ -286,7 +287,13 @@ def test_markdown_display_lines_modes():
     raw = markdown_display_lines(text, "raw")
     rendered = markdown_display_lines(text, "rendered")
     assert raw == ["# Title", "- item"]
-    assert "[TITLE]" in rendered
+    assert "==  TITLE  ==" in rendered
+
+
+def test_clamp_scroll():
+    assert clamp_scroll(-5, total=100, window=20) == 0
+    assert clamp_scroll(5, total=100, window=20) == 5
+    assert clamp_scroll(500, total=100, window=20) == 80
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
