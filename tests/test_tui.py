@@ -178,6 +178,14 @@ def test_reset_input_state():
     assert draft == "draft text"
 
 
+def test_reset_input_state_empty_draft():
+    pending, reverse_idx, history_idx, draft = reset_input_state("")
+    assert pending is None
+    assert reverse_idx is None
+    assert history_idx is None
+    assert draft == ""
+
+
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
     ctx = _ctx(Config(safety_level="confirm"))
     out = execute_line(ctx, "\\tool shell.exec cmd=echo_hi")

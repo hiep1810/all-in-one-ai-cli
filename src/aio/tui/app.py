@@ -137,6 +137,14 @@ class TerminalUI:
                 return 0
 
     def handle_key(self, key: object) -> None:
+        if key == "\x03":  # Ctrl+C
+            self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
+                reset_input_state("")
+            )
+            self.input_buffer = ""
+            self.add_output("Input cancelled.")
+            return
+
         if key == "\x1b":  # Esc
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state(self.input_buffer)

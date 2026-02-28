@@ -84,6 +84,7 @@ Tips:
 - Inline footer hints show likely completions while typing slash commands.
 - Use `Up/Down` arrows to navigate and recall previous inputs.
 - `Ctrl+L` clears output, `Ctrl+R` reverse-searches command history.
+- `Ctrl+C` soft-cancels current input without exiting TUI.
 - `Esc` cancels pending approval/search state and resets input navigation.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
