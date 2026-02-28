@@ -56,6 +56,19 @@ SLASH_COMMANDS = [
     "exit",
 ]
 APPROVAL_REQUIRED_PREFIX = "Approval required for risky tool:"
+CONFIG_KEYS = [
+    "model_provider",
+    "model_name",
+    "model_base_url",
+    "model_timeout_seconds",
+    "tui_theme",
+    "safety_level",
+]
+CONFIG_VALUE_HINTS: dict[str, list[str]] = {
+    "model_provider": ["mock", "llama_cpp"],
+    "tui_theme": ["neon", "minimal", "matrix"],
+    "safety_level": ["off", "confirm", "strict"],
+}
 
 
 class ExitTUI(Exception):
@@ -150,7 +163,7 @@ class TerminalUI:
             return
 
         if key == "\t":
-            self.input_buffer = complete_slash_command(self.input_buffer)
+            self.input_buffer = complete_input(self.input_buffer, self.ctx.registry.list_tools())
             return
 
         if key == curses.KEY_RESIZE:
@@ -509,6 +522,78 @@ def complete_slash_command(buffer: str) -> str:
     if len(shared) > len(body):
         return "\\" + shared
     return buffer
+
+
+def complete_input(buffer: str, tool_names: list[str]) -> str:
+    if not buffer.startswith("\\"):
+        return buffer
+    body = buffer[1:]
+    if body == "":
+        return buffer
+    if " " not in body:
+        return complete_slash_command(buffer)
+
+    try:
+        parts = shlex.split(body)
+    except ValueError:
+        return buffer
+    if not parts:
+        return buffer
+
+    cmd = parts[0]
+    trailing_space = body.endswith(" ")
+
+    if cmd == "tool":
+        if len(parts) == 1:
+            return _complete_token(buffer, body, "", tool_names)
+        if len(parts) == 2 and not trailing_space:
+            return _complete_token(buffer, body, parts[1], tool_names)
+        return buffer
+
+    if cmd == "config":
+        if len(parts) == 1:
+            return _complete_token(buffer, body, "", ["show", "set"])
+        if len(parts) == 2 and not trailing_space:
+            return _complete_token(buffer, body, parts[1], ["show", "set"])
+        if len(parts) == 3 and parts[1] == "set" and not trailing_space:
+            return _complete_token(buffer, body, parts[2], CONFIG_KEYS)
+        if len(parts) == 4 and parts[1] == "set":
+            key = parts[2]
+            hints = CONFIG_VALUE_HINTS.get(key, [])
+            if trailing_space:
+                return buffer
+            return _complete_token(buffer, body, parts[3], hints)
+        return buffer
+
+    return buffer
+
+
+def _complete_token(
+    original_buffer: str,
+    body: str,
+    token: str,
+    candidates: list[str],
+) -> str:
+    if not candidates:
+        return original_buffer
+    matches = [item for item in candidates if item.startswith(token)]
+    if not matches:
+        return original_buffer
+
+    replacement = token
+    if len(matches) == 1:
+        replacement = matches[0]
+    else:
+        shared = commonprefix(matches)
+        if len(shared) > len(token):
+            replacement = shared
+        else:
+            return original_buffer
+
+    updated_body = body[: len(body) - len(token)] + replacement
+    if len(matches) == 1:
+        updated_body += " "
+    return "\\" + updated_body
 
 
 def _requires_approval(message: str) -> bool:

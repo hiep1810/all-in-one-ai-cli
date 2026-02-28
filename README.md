@@ -80,6 +80,7 @@ Inside the UI, type commands and press Enter:
 Tips:
 
 - Press `Tab` to autocomplete `\\commands`.
+- `Tab` also completes `\\tool <name>` and `\\config set <key> <value>` hints.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

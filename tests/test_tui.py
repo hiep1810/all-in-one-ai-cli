@@ -12,6 +12,7 @@ from aio.tui.app import (
     TUIContext,
     _inject_approve_flag,
     _requires_approval,
+    complete_input,
     complete_slash_command,
     execute_line,
 )
@@ -86,6 +87,21 @@ def test_complete_slash_command_shared_prefix():
 
 def test_complete_slash_command_noop_for_plain_text():
     assert complete_slash_command("hello") == "hello"
+
+
+def test_complete_input_tool_name():
+    out = complete_input("\\tool fs.se", ["fs.search", "fs.read"])
+    assert out == "\\tool fs.search "
+
+
+def test_complete_input_config_key():
+    out = complete_input("\\config set model_b", [])
+    assert out == "\\config set model_base_url "
+
+
+def test_complete_input_config_value_hint():
+    out = complete_input("\\config set safety_level st", [])
+    assert out == "\\config set safety_level strict "
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
