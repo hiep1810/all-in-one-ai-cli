@@ -16,6 +16,7 @@ from aio.tui.app import (
     clear_to_line_start,
     complete_input,
     complete_slash_command,
+    cursor_from_click,
     delete_forward,
     delete_prev_word,
     delete_backspace,
@@ -226,6 +227,15 @@ def test_delete_prev_word():
     updated, cursor = delete_prev_word("say hello world", 10)
     assert updated == "say world"
     assert cursor == 4
+
+
+def test_cursor_from_click_clamps_left_and_right():
+    assert cursor_from_click(mouse_x=0, prompt_prefix_len=6, input_len=10) == 0
+    assert cursor_from_click(mouse_x=20, prompt_prefix_len=6, input_len=5) == 5
+
+
+def test_cursor_from_click_inside_input():
+    assert cursor_from_click(mouse_x=9, prompt_prefix_len=6, input_len=10) == 3
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

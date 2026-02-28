@@ -84,6 +84,7 @@ Tips:
 - Inline footer hints show likely completions while typing slash commands.
 - Use `Up/Down` arrows to navigate and recall previous inputs.
 - Use `Left/Right` arrows (or `Home/End`) to move the input cursor.
+- Click on the input line to place the cursor (mouse-enabled terminals).
 - `Ctrl+L` clears output, `Ctrl+R` reverse-searches command history.
 - `Ctrl+C` soft-cancels current input without exiting TUI.
 - `Ctrl+U` clears from cursor to line start, `Ctrl+K` clears from cursor to line end.

@@ -123,6 +123,10 @@ class TerminalUI:
     def run(self) -> int:
         curses.curs_set(1)
         self.screen.keypad(True)
+        try:
+            curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+        except curses.error:
+            pass
         self._init_colors()
         self.add_output('AIO Console ready. Chat directly, or use \\help for commands.')
         while True:
@@ -220,6 +224,10 @@ class TerminalUI:
         if key == curses.KEY_RESIZE:
             return
 
+        if key == curses.KEY_MOUSE:
+            self._handle_mouse_click()
+            return
+
         if key == curses.KEY_LEFT:
             self.cursor_pos = max(0, self.cursor_pos - 1)
             return
@@ -284,6 +292,21 @@ class TerminalUI:
         self.reverse_search_index = index - 1
         self.input_buffer = match
         self.cursor_pos = len(match)
+
+    def _handle_mouse_click(self) -> None:
+        try:
+            _, mouse_x, mouse_y, _, _ = curses.getmouse()
+        except curses.error:
+            return
+        height, _ = self.screen.getmaxyx()
+        input_y = max(0, height - 1)
+        if mouse_y != input_y:
+            return
+        self.cursor_pos = cursor_from_click(
+            mouse_x=mouse_x,
+            prompt_prefix_len=len(" cmd> "),
+            input_len=len(self.input_buffer),
+        )
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -782,6 +805,11 @@ def reverse_search_prev(
             return idx, item
         idx -= 1
     return None, None
+
+
+def cursor_from_click(mouse_x: int, prompt_prefix_len: int, input_len: int) -> int:
+    raw = mouse_x - prompt_prefix_len
+    return max(0, min(raw, input_len))
 
 
 def reset_input_state(input_buffer: str) -> tuple[None, None, None, str]:
