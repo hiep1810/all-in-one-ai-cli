@@ -47,7 +47,8 @@ Now `aio ask "hello"` will send requests to `POST /v1/chat/completions` on your 
 - `aio ask "..."`
 - `aio chat "..." --session default`
 - `aio tool run <name> --arg k=v`
-- `aio agent run "..."`
+- `aio tool run <name> --arg k=v --approve-risky`
+- `aio agent run "..." --approve-risky`
 - `aio workflow run workflows/bugfix.yml`
 - `aio replay <logfile>`
 
@@ -65,6 +66,7 @@ Inside the UI, type commands and press Enter:
 - `\\help`
 - `\\agent fix failing tests`
 - `\\tool fs.search root=. query=TODO`
+- `\\tool shell.exec cmd='echo hi' --approve-risky`
 - `\\history 20`
 - `\\clear`
 - `\\save`

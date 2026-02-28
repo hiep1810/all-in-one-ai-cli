@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from aio.agent.executor import AgentExecutor
+from aio.agent.safety import should_block_tool
 from aio.config.loader import config_to_dict, load_config, update_config, write_default_config
 from aio.llm.router import get_client
 from aio.logging.audit import AuditLogger
@@ -40,11 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     tool_run = tool_sub.add_parser("run")
     tool_run.add_argument("name")
     tool_run.add_argument("--arg", action="append", default=[], help="k=v")
+    tool_run.add_argument("--approve-risky", action="store_true", help="Approve risky tools")
 
     agent = sub.add_parser("agent", help="Run agent")
     agent_sub = agent.add_subparsers(dest="agent_cmd", required=True)
     agent_run = agent_sub.add_parser("run")
     agent_run.add_argument("goal")
+    agent_run.add_argument("--approve-risky", action="store_true", help="Approve risky tools")
 
     wf = sub.add_parser("workflow", help="Run workflow")
     wf_sub = wf.add_subparsers(dest="wf_cmd", required=True)
@@ -110,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "tool" and args.tool_cmd == "run":
         registry = ToolRegistry()
         kwargs = _parse_kv(args.arg)
+        blocked, reason = should_block_tool(config.safety_level, args.name, args.approve_risky)
+        if blocked:
+            print(reason)
+            return 1
         result = registry.run(args.name, **kwargs)
         print(result)
         logger.log({"cmd": "tool.run", "name": args.name})
@@ -118,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agent" and args.agent_cmd == "run":
         registry = ToolRegistry()
         executor = AgentExecutor(config, registry)
-        result = executor.run(args.goal)
+        result = executor.run(args.goal, approve_risky=args.approve_risky)
         print(json.dumps(result, indent=2))
         logger.log({"cmd": "agent.run", "goal": args.goal})
         return 0

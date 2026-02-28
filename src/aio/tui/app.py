@@ -12,6 +12,7 @@ from pathlib import Path
 from shutil import which
 
 from aio.agent.executor import AgentExecutor
+from aio.agent.safety import should_block_tool
 from aio.config.loader import config_to_dict, load_config, update_config
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
@@ -20,9 +21,9 @@ from aio.workflows.runner import run_workflow
 
 HELP_TEXT = """Commands:
   \\help
-  \\agent <goal>
+  \\agent <goal> [--approve-risky]
   \\chat <session> <message>
-  \\tool <name> [k=v ...]
+  \\tool <name> [k=v ...] [--approve-risky]
   \\tools
   \\history [n]
   \\clear
@@ -357,10 +358,12 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
         return "Clipboard tool not found. Last response kept in memory."
 
     if cmd == "agent":
-        goal = " ".join(tokens[1:]).strip()
+        approve_risky = "--approve-risky" in tokens[1:]
+        args = [t for t in tokens[1:] if t != "--approve-risky"]
+        goal = " ".join(args).strip()
         if not goal:
-            return "Usage: \\agent <goal>"
-        result = ctx.executor.run(goal)
+            return "Usage: \\agent <goal> [--approve-risky]"
+        result = ctx.executor.run(goal, approve_risky=approve_risky)
         ctx.last_response = json.dumps(result, indent=2)
         ctx.logger.log({"cmd": "agent.run", "goal": goal, "via": "tui"})
         return ctx.last_response
@@ -376,14 +379,21 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
 
     if cmd == "tool":
         if len(tokens) < 2:
-            return "Usage: \\tool <name> [k=v ...]"
+            return "Usage: \\tool <name> [k=v ...] [--approve-risky]"
         name = tokens[1]
         kwargs: dict[str, str] = {}
+        approve_risky = False
         for kv in tokens[2:]:
+            if kv == "--approve-risky":
+                approve_risky = True
+                continue
             if "=" not in kv:
                 return f"Invalid tool arg: {kv}. Expected k=v"
             k, v = kv.split("=", 1)
             kwargs[k] = v
+        blocked, reason = should_block_tool(ctx.config.safety_level, name, approve_risky)
+        if blocked:
+            return reason
         result = ctx.registry.run(name, **kwargs)
         ctx.last_response = str(result)
         ctx.logger.log({"cmd": "tool.run", "name": name, "via": "tui"})

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from aio.agent.executor import AgentExecutor
+from aio.config.schema import Config
 from aio.config.loader import load_config
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
@@ -8,8 +9,8 @@ from aio.tools.registry import ToolRegistry
 from aio.tui.app import CLEAR_SIGNAL, TUIContext, complete_slash_command, execute_line
 
 
-def _ctx() -> TUIContext:
-    config = load_config()
+def _ctx(config: Config | None = None) -> TUIContext:
+    config = config or load_config()
     registry = ToolRegistry()
     return TUIContext(
         config=config,
@@ -77,3 +78,15 @@ def test_complete_slash_command_shared_prefix():
 
 def test_complete_slash_command_noop_for_plain_text():
     assert complete_slash_command("hello") == "hello"
+
+
+def test_tui_tool_risky_requires_approve_in_confirm_mode():
+    ctx = _ctx(Config(safety_level="confirm"))
+    out = execute_line(ctx, "\\tool shell.exec cmd=echo_hi")
+    assert "Approval required" in out
+
+
+def test_tui_tool_risky_runs_with_approve_flag():
+    ctx = _ctx(Config(safety_level="confirm"))
+    out = execute_line(ctx, "\\tool shell.exec cmd=echo_hi --approve-risky")
+    assert "echo_hi" in out
