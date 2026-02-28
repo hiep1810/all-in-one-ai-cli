@@ -17,6 +17,7 @@ from aio.tui.app import (
     execute_line,
     history_next,
     history_prev,
+    reset_input_state,
     reverse_search_prev,
     suggest_input,
 )
@@ -167,6 +168,14 @@ def test_reverse_search_prev_on_empty_history():
     idx, value = reverse_search_prev([], "x", None)
     assert idx is None
     assert value is None
+
+
+def test_reset_input_state():
+    pending, reverse_idx, history_idx, draft = reset_input_state("draft text")
+    assert pending is None
+    assert reverse_idx is None
+    assert history_idx is None
+    assert draft == "draft text"
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
