@@ -17,6 +17,7 @@ from aio.tui.app import (
     execute_line,
     history_next,
     history_prev,
+    reverse_search_prev,
     suggest_input,
 )
 
@@ -145,6 +146,27 @@ def test_history_prev_on_empty_history_is_noop():
     assert idx is None
     assert draft == ""
     assert buf == "abc"
+
+
+def test_reverse_search_prev_with_query():
+    history = ["\\help", "hello world", "\\tool fs.search root=. query=TODO"]
+    idx, value = reverse_search_prev(history, "tool", None)
+    assert idx == 2
+    assert value == "\\tool fs.search root=. query=TODO"
+
+
+def test_reverse_search_prev_repeated_from_older_index():
+    history = ["alpha", "beta alpha", "gamma alpha"]
+    idx, value = reverse_search_prev(history, "alpha", None)
+    assert (idx, value) == (2, "gamma alpha")
+    idx2, value2 = reverse_search_prev(history, "alpha", idx - 1)
+    assert (idx2, value2) == (1, "beta alpha")
+
+
+def test_reverse_search_prev_on_empty_history():
+    idx, value = reverse_search_prev([], "x", None)
+    assert idx is None
+    assert value is None
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

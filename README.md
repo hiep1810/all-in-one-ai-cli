@@ -83,6 +83,7 @@ Tips:
 - `Tab` also completes `\\tool <name>` and `\\config set <key> <value>` hints.
 - Inline footer hints show likely completions while typing slash commands.
 - Use `Up/Down` arrows to navigate and recall previous inputs.
+- `Ctrl+L` clears output, `Ctrl+R` reverse-searches command history.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

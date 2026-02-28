@@ -92,6 +92,7 @@ class TerminalUI:
         self.input_buffer = ""
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
+        self.reverse_search_index: int | None = None
         self.lines: list[str] = []
         self.max_history = 400
         self.use_color = False
@@ -160,14 +161,27 @@ class TerminalUI:
             self.input_buffer = ""
             self.history_nav_index = None
             self.history_nav_draft = ""
+            self.reverse_search_index = None
+            return
+
+        if key == "\x0c":  # Ctrl+L
+            self.lines = []
+            self.add_output("Screen cleared.")
+            self.reverse_search_index = None
+            return
+
+        if key == "\x12":  # Ctrl+R
+            self._reverse_search_prev()
             return
 
         if key in ("\x7f", "\b") or key == curses.KEY_BACKSPACE:
             self.input_buffer = self.input_buffer[:-1]
+            self.reverse_search_index = None
             return
 
         if key == "\t":
             self.input_buffer = complete_input(self.input_buffer, self.ctx.registry.list_tools())
+            self.reverse_search_index = None
             return
 
         if key == curses.KEY_RESIZE:
@@ -175,14 +189,17 @@ class TerminalUI:
 
         if key == curses.KEY_UP:
             self._history_prev()
+            self.reverse_search_index = None
             return
 
         if key == curses.KEY_DOWN:
             self._history_next()
+            self.reverse_search_index = None
             return
 
         if isinstance(key, str) and key.isprintable():
             self.input_buffer += key
+            self.reverse_search_index = None
 
     def _history_prev(self) -> None:
         self.history_nav_index, self.history_nav_draft, self.input_buffer = history_prev(
@@ -199,6 +216,18 @@ class TerminalUI:
             history_nav_draft=self.history_nav_draft,
             input_buffer=self.input_buffer,
         )
+
+    def _reverse_search_prev(self) -> None:
+        query = self.input_buffer.strip()
+        index, match = reverse_search_prev(
+            history=self.ctx.command_history,
+            query=query,
+            start_index=self.reverse_search_index,
+        )
+        if index is None or match is None:
+            return
+        self.reverse_search_index = index - 1
+        self.input_buffer = match
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -679,6 +708,23 @@ def history_next(
         history_nav_index += 1
         return history_nav_index, history_nav_draft, history[history_nav_index]
     return None, history_nav_draft, history_nav_draft
+
+
+def reverse_search_prev(
+    history: list[str],
+    query: str,
+    start_index: int | None,
+) -> tuple[int | None, str | None]:
+    if not history:
+        return None, None
+    idx = len(history) - 1 if start_index is None else min(start_index, len(history) - 1)
+    needle = query.lower()
+    while idx >= 0:
+        item = history[idx]
+        if not needle or needle in item.lower():
+            return idx, item
+        idx -= 1
+    return None, None
 
 
 def _complete_token(
