@@ -16,6 +16,8 @@ from aio.tui.app import (
     clear_to_line_start,
     complete_input,
     complete_slash_command,
+    delete_forward,
+    delete_prev_word,
     delete_backspace,
     execute_line,
     history_next,
@@ -212,6 +214,18 @@ def test_clear_to_line_end_with_cursor():
     updated, cursor = clear_to_line_end("hello world", 5)
     assert updated == "hello"
     assert cursor == 5
+
+
+def test_delete_forward_at_cursor():
+    updated, cursor = delete_forward("hello", 1)
+    assert updated == "hllo"
+    assert cursor == 1
+
+
+def test_delete_prev_word():
+    updated, cursor = delete_prev_word("say hello world", 10)
+    assert updated == "say world"
+    assert cursor == 4
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

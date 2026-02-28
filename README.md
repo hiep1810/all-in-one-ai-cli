@@ -87,6 +87,7 @@ Tips:
 - `Ctrl+L` clears output, `Ctrl+R` reverse-searches command history.
 - `Ctrl+C` soft-cancels current input without exiting TUI.
 - `Ctrl+U` clears from cursor to line start, `Ctrl+K` clears from cursor to line end.
+- `Delete` removes char at cursor, `Ctrl+W` deletes the previous word.
 - `Esc` cancels pending approval/search state and resets input navigation.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.

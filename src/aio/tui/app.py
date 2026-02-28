@@ -155,6 +155,10 @@ class TerminalUI:
             self.input_buffer, self.cursor_pos = clear_to_line_start(self.input_buffer, self.cursor_pos)
             return
 
+        if key == "\x17":  # Ctrl+W
+            self.input_buffer, self.cursor_pos = delete_prev_word(self.input_buffer, self.cursor_pos)
+            return
+
         if key == "\x1b":  # Esc
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state(self.input_buffer)
@@ -222,6 +226,10 @@ class TerminalUI:
 
         if key == curses.KEY_RIGHT:
             self.cursor_pos = min(len(self.input_buffer), self.cursor_pos + 1)
+            return
+
+        if key == curses.KEY_DC:
+            self.input_buffer, self.cursor_pos = delete_forward(self.input_buffer, self.cursor_pos)
             return
 
         if key == curses.KEY_HOME or key == "\x01":  # Home or Ctrl+A
@@ -792,6 +800,32 @@ def delete_backspace(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
         return input_buffer, cursor_pos
     updated = input_buffer[: cursor_pos - 1] + input_buffer[cursor_pos:]
     return updated, cursor_pos - 1
+
+
+def delete_forward(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    if cursor_pos >= len(input_buffer):
+        return input_buffer, cursor_pos
+    updated = input_buffer[:cursor_pos] + input_buffer[cursor_pos + 1 :]
+    return updated, cursor_pos
+
+
+def delete_prev_word(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
+    cursor_pos = max(0, min(cursor_pos, len(input_buffer)))
+    if cursor_pos == 0:
+        return input_buffer, cursor_pos
+
+    left = input_buffer[:cursor_pos]
+    right = input_buffer[cursor_pos:]
+    i = len(left)
+
+    while i > 0 and left[i - 1].isspace():
+        i -= 1
+    while i > 0 and not left[i - 1].isspace():
+        i -= 1
+
+    updated = left[:i] + right
+    return updated, i
 
 
 def clear_to_line_start(input_buffer: str, cursor_pos: int) -> tuple[str, int]:
