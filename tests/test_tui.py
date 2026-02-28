@@ -15,6 +15,8 @@ from aio.tui.app import (
     complete_input,
     complete_slash_command,
     execute_line,
+    history_next,
+    history_prev,
     suggest_input,
 )
 
@@ -119,6 +121,30 @@ def test_suggest_input_for_tool_name():
 def test_suggest_input_for_config_value():
     out = suggest_input("\\config set safety_level ", [])
     assert "strict" in out
+
+
+def test_history_prev_and_next_with_draft_restore():
+    history = ["first", "second", "third"]
+    idx = None
+    draft = ""
+    buf = "typing now"
+
+    idx, draft, buf = history_prev(history, idx, draft, buf)
+    assert (idx, draft, buf) == (2, "typing now", "third")
+    idx, draft, buf = history_prev(history, idx, draft, buf)
+    assert (idx, buf) == (1, "second")
+    idx, draft, buf = history_next(history, idx, draft, buf)
+    assert (idx, buf) == (2, "third")
+    idx, draft, buf = history_next(history, idx, draft, buf)
+    assert idx is None
+    assert buf == "typing now"
+
+
+def test_history_prev_on_empty_history_is_noop():
+    idx, draft, buf = history_prev([], None, "", "abc")
+    assert idx is None
+    assert draft == ""
+    assert buf == "abc"
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

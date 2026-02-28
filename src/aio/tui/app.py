@@ -90,6 +90,8 @@ class TerminalUI:
     def __init__(self, screen: curses.window):
         self.screen = screen
         self.input_buffer = ""
+        self.history_nav_index: int | None = None
+        self.history_nav_draft = ""
         self.lines: list[str] = []
         self.max_history = 400
         self.use_color = False
@@ -156,6 +158,8 @@ class TerminalUI:
                 else:
                     self._handle_chat_input(raw)
             self.input_buffer = ""
+            self.history_nav_index = None
+            self.history_nav_draft = ""
             return
 
         if key in ("\x7f", "\b") or key == curses.KEY_BACKSPACE:
@@ -169,8 +173,32 @@ class TerminalUI:
         if key == curses.KEY_RESIZE:
             return
 
+        if key == curses.KEY_UP:
+            self._history_prev()
+            return
+
+        if key == curses.KEY_DOWN:
+            self._history_next()
+            return
+
         if isinstance(key, str) and key.isprintable():
             self.input_buffer += key
+
+    def _history_prev(self) -> None:
+        self.history_nav_index, self.history_nav_draft, self.input_buffer = history_prev(
+            history=self.ctx.command_history,
+            history_nav_index=self.history_nav_index,
+            history_nav_draft=self.history_nav_draft,
+            input_buffer=self.input_buffer,
+        )
+
+    def _history_next(self) -> None:
+        self.history_nav_index, self.history_nav_draft, self.input_buffer = history_next(
+            history=self.ctx.command_history,
+            history_nav_index=self.history_nav_index,
+            history_nav_draft=self.history_nav_draft,
+            input_buffer=self.input_buffer,
+        )
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -621,6 +649,36 @@ def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[st
 
 def _match_candidates(prefix: str, candidates: list[str]) -> list[str]:
     return [item for item in candidates if item.startswith(prefix)]
+
+
+def history_prev(
+    history: list[str],
+    history_nav_index: int | None,
+    history_nav_draft: str,
+    input_buffer: str,
+) -> tuple[int | None, str, str]:
+    if not history:
+        return history_nav_index, history_nav_draft, input_buffer
+    if history_nav_index is None:
+        history_nav_draft = input_buffer
+        history_nav_index = len(history) - 1
+    elif history_nav_index > 0:
+        history_nav_index -= 1
+    return history_nav_index, history_nav_draft, history[history_nav_index]
+
+
+def history_next(
+    history: list[str],
+    history_nav_index: int | None,
+    history_nav_draft: str,
+    input_buffer: str,
+) -> tuple[int | None, str, str]:
+    if not history or history_nav_index is None:
+        return history_nav_index, history_nav_draft, input_buffer
+    if history_nav_index < len(history) - 1:
+        history_nav_index += 1
+        return history_nav_index, history_nav_draft, history[history_nav_index]
+    return None, history_nav_draft, history_nav_draft
 
 
 def _complete_token(
