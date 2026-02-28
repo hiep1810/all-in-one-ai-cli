@@ -91,6 +91,9 @@ class TerminalUI:
         self.screen = screen
         self.input_buffer = ""
         self.cursor_pos = 0
+        self.selection_mode = False
+        self.selection_anchor: int | None = None
+        self.selection_cursor: int | None = None
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -142,6 +145,14 @@ class TerminalUI:
                 return 0
 
     def handle_key(self, key: object) -> None:
+        if key == "\x13":  # Ctrl+S
+            self._toggle_selection_mode()
+            return
+
+        if self.selection_mode:
+            self._handle_selection_key(key)
+            return
+
         if key == "\x03":  # Ctrl+C
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
                 reset_input_state("")
@@ -261,6 +272,44 @@ class TerminalUI:
         if isinstance(key, str) and key.isprintable():
             self.input_buffer, self.cursor_pos = insert_text(self.input_buffer, self.cursor_pos, key)
             self.reverse_search_index = None
+
+    def _toggle_selection_mode(self) -> None:
+        if self.selection_mode:
+            self.selection_mode = False
+            self.selection_anchor = None
+            self.selection_cursor = None
+            self.add_output("Selection mode off.")
+            return
+        if not self.lines:
+            self.add_output("No output lines to select.")
+            return
+        self.selection_mode = True
+        self.selection_anchor = len(self.lines) - 1
+        self.selection_cursor = len(self.lines) - 1
+        self.add_output("Selection mode on. Use Up/Down and Ctrl+Y to copy.")
+
+    def _handle_selection_key(self, key: object) -> None:
+        if key == "\x1b":  # Esc
+            self.selection_mode = False
+            self.selection_anchor = None
+            self.selection_cursor = None
+            self.add_output("Selection mode off.")
+            return
+        if key == curses.KEY_UP and self.selection_cursor is not None:
+            self.selection_cursor = max(0, self.selection_cursor - 1)
+            return
+        if key == curses.KEY_DOWN and self.selection_cursor is not None:
+            self.selection_cursor = min(len(self.lines) - 1, self.selection_cursor + 1)
+            return
+        if key == "\x19":  # Ctrl+Y
+            text = selection_text(self.lines, self.selection_anchor, self.selection_cursor)
+            if not text:
+                self.add_output("No selection to copy.")
+            elif _copy_to_clipboard(text):
+                self.add_output("Copied selected lines to clipboard.")
+            else:
+                self.add_output("Clipboard tool not found. Selection not copied.")
+            return
 
     def _history_prev(self) -> None:
         self.history_nav_index, self.history_nav_draft, self.input_buffer = history_prev(
@@ -425,16 +474,24 @@ class TerminalUI:
         bottom_reserved = 3
         output_height = max(1, height - y - bottom_reserved)
 
-        wrapped: list[str] = []
-        for line in self.lines:
-            wrapped.extend(textwrap.wrap(line, width=max(10, width - 1)) or [""])
+        wrapped: list[tuple[int, str]] = []
+        for src_idx, line in enumerate(self.lines):
+            parts = textwrap.wrap(line, width=max(10, width - 1)) or [""]
+            for part in parts:
+                wrapped.append((src_idx, part))
 
         visible = wrapped[-output_height:]
-        for idx, line in enumerate(visible):
-            self._draw(y + idx, 0, line, width - 1)
+        sel_range = selected_line_range(self.selection_anchor, self.selection_cursor, len(self.lines))
+        for idx, (src_idx, line) in enumerate(visible):
+            attr = 0
+            if sel_range is not None and sel_range[0] <= src_idx <= sel_range[1]:
+                attr = self._style(4, bold=True) | curses.A_REVERSE
+            self._draw(y + idx, 0, line, width - 1, attr)
 
         if self.pending_approval_raw is not None:
             hint_text = "approval> type y/yes to approve, anything else to cancel"
+        elif self.selection_mode:
+            hint_text = "selection> Up/Down to select, Ctrl+Y copy, Esc exit"
         else:
             suggestions = suggest_input(self.input_buffer, self.ctx.registry.list_tools())
             hint_text = f"hints> {', '.join(suggestions)}" if suggestions else "hints> (none)"
@@ -805,6 +862,26 @@ def reverse_search_prev(
             return idx, item
         idx -= 1
     return None, None
+
+
+def selected_line_range(
+    anchor: int | None,
+    cursor: int | None,
+    total_lines: int,
+) -> tuple[int, int] | None:
+    if anchor is None or cursor is None or total_lines <= 0:
+        return None
+    a = max(0, min(anchor, total_lines - 1))
+    c = max(0, min(cursor, total_lines - 1))
+    return (min(a, c), max(a, c))
+
+
+def selection_text(lines: list[str], anchor: int | None, cursor: int | None) -> str:
+    sel_range = selected_line_range(anchor, cursor, len(lines))
+    if sel_range is None:
+        return ""
+    start, end = sel_range
+    return "\n".join(lines[start : end + 1])
 
 
 def cursor_from_click(mouse_x: int, prompt_prefix_len: int, input_len: int) -> int:

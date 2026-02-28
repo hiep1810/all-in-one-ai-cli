@@ -26,6 +26,8 @@ from aio.tui.app import (
     insert_text,
     reset_input_state,
     reverse_search_prev,
+    selected_line_range,
+    selection_text,
     suggest_input,
 )
 
@@ -236,6 +238,19 @@ def test_cursor_from_click_clamps_left_and_right():
 
 def test_cursor_from_click_inside_input():
     assert cursor_from_click(mouse_x=9, prompt_prefix_len=6, input_len=10) == 3
+
+
+def test_selected_line_range():
+    assert selected_line_range(5, 2, 10) == (2, 5)
+
+
+def test_selection_text():
+    lines = ["a", "b", "c", "d"]
+    assert selection_text(lines, 1, 2) == "b\nc"
+
+
+def test_selection_text_empty_when_no_selection():
+    assert selection_text(["a"], None, 0) == ""
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():
