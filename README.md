@@ -79,6 +79,7 @@ Inside the UI, type commands and press Enter:
 Tips:
 
 - Press `Tab` to autocomplete `\\commands`.
+- Plain chat responses render progressively in the TUI for a live feel.
 
 TUI themes:
 

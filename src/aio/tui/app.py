@@ -6,6 +6,7 @@ from os.path import commonprefix
 import shlex
 import subprocess
 import textwrap
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,8 @@ Main mode:
 """
 
 CLEAR_SIGNAL = "[[AIO_CLEAR_SCREEN]]"
+STREAM_CHUNK_SIZE = 8
+STREAM_DELAY_SECONDS = 0.02
 SLASH_COMMANDS = [
     "help",
     "agent",
@@ -126,6 +129,8 @@ class TerminalUI:
                 if output == CLEAR_SIGNAL:
                     self.lines = []
                     self.add_output("Screen cleared.")
+                elif not raw.startswith("\\"):
+                    self._stream_output(output)
                 else:
                     self.add_output(output)
             self.input_buffer = ""
@@ -282,6 +287,19 @@ class TerminalUI:
         self._draw(height - 1, 0, prompt.ljust(max(0, width - 1)), width - 1, self._style(1, bold=True))
         self.screen.move(height - 1, min(len(prompt), max(0, width - 1)))
         self.screen.refresh()
+
+    def _stream_output(self, text: str) -> None:
+        buffer = ""
+        previous_preview_count = 0
+        for chunk in iter_stream_chunks(text, chunk_size=STREAM_CHUNK_SIZE):
+            buffer += chunk
+            preview_lines = [f"ai> {line}" for line in (buffer.splitlines() or [""])]
+            if previous_preview_count > 0:
+                self.lines = self.lines[:-previous_preview_count]
+            self.lines.extend(preview_lines)
+            previous_preview_count = len(preview_lines)
+            self.render()
+            time.sleep(STREAM_DELAY_SECONDS)
 
 
 def execute_line(ctx: TUIContext, raw: str) -> str:
@@ -448,6 +466,12 @@ def complete_slash_command(buffer: str) -> str:
     if len(shared) > len(body):
         return "\\" + shared
     return buffer
+
+
+def iter_stream_chunks(text: str, chunk_size: int = 8) -> list[str]:
+    if chunk_size <= 0:
+        return [text]
+    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)] or [""]
 
 
 def _copy_to_clipboard(text: str) -> bool:
