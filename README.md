@@ -89,6 +89,8 @@ Inside the UI, type commands and press Enter:
 - `\\md open README.md`
 - `\\md mode raw`
 - `\\md mode rendered`
+- `\\md focus markdown`
+- `\\md focus input`
 - `\\md clear`
 - `\\save`
 - `\\copylast`
@@ -114,6 +116,7 @@ Tips:
 - `\\md open <path>` renders markdown in a side panel next to chat.
 - `\\md mode raw|rendered` toggles between raw markdown text and rendered view.
 - When markdown panel is open, use `Up/Down` (line) and `PgUp/PgDn` (page) to scroll it.
+- Use `Ctrl+O` (or `\\md focus ...`) to switch control between input and markdown panel.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

@@ -24,6 +24,7 @@ HELP_TEXT = r"""Commands:
   \help
   \md open <path>
   \md mode <raw|rendered>
+  \md focus <input|markdown>
   \md clear
   \agent <goal> [--approve-risky]
   \chat <session> <message>
@@ -102,6 +103,7 @@ class TerminalUI:
         self.markdown_raw_text = ""
         self.markdown_mode = "rendered"
         self.markdown_scroll = 0
+        self.focus_target = "input"  # input | markdown
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -153,6 +155,11 @@ class TerminalUI:
                 return 0
 
     def handle_key(self, key: object) -> None:
+        if key == "\x0f":  # Ctrl+O
+            self.focus_target = toggle_focus(self.focus_target)
+            self.add_output(f"Focus: {self.focus_target}")
+            return
+
         if key == "\x13":  # Ctrl+S
             self._toggle_selection_mode()
             return
@@ -161,7 +168,7 @@ class TerminalUI:
             self._handle_selection_key(key)
             return
 
-        if self.markdown_path is not None:
+        if self.focus_target == "markdown" and self.markdown_path is not None:
             if key in {curses.KEY_NPAGE, curses.KEY_DOWN}:
                 self.markdown_scroll += 3 if key == curses.KEY_DOWN else 12
                 return
@@ -389,7 +396,18 @@ class TerminalUI:
             self.markdown_path = None
             self.markdown_raw_text = ""
             self.markdown_scroll = 0
+            if self.focus_target == "markdown":
+                self.focus_target = "input"
             return "Markdown panel cleared."
+
+        if len(tokens) >= 3 and tokens[1] == "focus":
+            mode = tokens[2].strip().lower()
+            if mode not in {"input", "markdown"}:
+                return "Invalid focus. Use: input | markdown"
+            if mode == "markdown" and not self.markdown_path:
+                return "Open a markdown file first with \\md open <path>"
+            self.focus_target = mode
+            return f"Markdown focus set: {mode}"
 
         if len(tokens) >= 3 and tokens[1] == "mode":
             mode = tokens[2].strip().lower()
@@ -573,8 +591,10 @@ class TerminalUI:
             hint_text = "approval> type y/yes to approve, anything else to cancel"
         elif self.selection_mode:
             hint_text = "selection> Up/Down to select, Ctrl+Y copy, Esc exit"
+        elif self.markdown_path is not None and self.focus_target == "markdown":
+            hint_text = "markdown focus> Up/Down line scroll, PgUp/PgDn page, Ctrl+O switch"
         elif self.markdown_path is not None:
-            hint_text = "markdown> Up/Down line scroll, PgUp/PgDn page scroll"
+            hint_text = "input focus> Ctrl+O to control markdown panel"
         else:
             suggestions = suggest_input(self.input_buffer, self.ctx.registry.list_tools())
             hint_text = f"hints> {', '.join(suggestions)}" if suggestions else "hints> (none)"
@@ -584,6 +604,7 @@ class TerminalUI:
             f" provider={self.ctx.config.model_provider}  "
             f"model={self.ctx.config.model_name}  "
             f"theme={self.theme_name}  "
+            f"focus={self.focus_target}  "
             f"safety={self.ctx.config.safety_level} "
         )
         self._draw(height - 2, 0, status.ljust(max(0, width - 1)), width - 1, self._style(3))
@@ -836,11 +857,13 @@ def complete_input(buffer: str, tool_names: list[str]) -> str:
 
     if cmd == "md":
         if len(parts) == 1:
-            return _complete_token(buffer, body, "", ["open", "mode", "clear"])
+            return _complete_token(buffer, body, "", ["open", "mode", "focus", "clear"])
         if len(parts) == 2 and not trailing_space:
-            return _complete_token(buffer, body, parts[1], ["open", "mode", "clear"])
+            return _complete_token(buffer, body, parts[1], ["open", "mode", "focus", "clear"])
         if len(parts) == 3 and parts[1] == "mode" and not trailing_space:
             return _complete_token(buffer, body, parts[2], ["raw", "rendered"])
+        if len(parts) == 3 and parts[1] == "focus" and not trailing_space:
+            return _complete_token(buffer, body, parts[2], ["input", "markdown"])
         return buffer
 
     if cmd == "config":
@@ -889,13 +912,17 @@ def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[st
 
     if cmd == "md":
         if len(parts) == 1 and trailing_space:
-            return ["open", "mode", "clear"][:limit]
+            return ["open", "mode", "focus", "clear"][:limit]
         if len(parts) == 2 and not trailing_space:
-            return _match_candidates(parts[1], ["open", "mode", "clear"])[:limit]
+            return _match_candidates(parts[1], ["open", "mode", "focus", "clear"])[:limit]
         if len(parts) == 2 and trailing_space and parts[1] == "mode":
             return ["raw", "rendered"][:limit]
         if len(parts) == 3 and parts[1] == "mode" and not trailing_space:
             return _match_candidates(parts[2], ["raw", "rendered"])[:limit]
+        if len(parts) == 2 and trailing_space and parts[1] == "focus":
+            return ["input", "markdown"][:limit]
+        if len(parts) == 3 and parts[1] == "focus" and not trailing_space:
+            return _match_candidates(parts[2], ["input", "markdown"])[:limit]
         return []
 
     if cmd == "config":
@@ -985,6 +1012,10 @@ def selection_text(lines: list[str], anchor: int | None, cursor: int | None) -> 
         return ""
     start, end = sel_range
     return "\n".join(lines[start : end + 1])
+
+
+def toggle_focus(current: str) -> str:
+    return "markdown" if current == "input" else "input"
 
 
 def clamp_scroll(scroll: int, total: int, window: int) -> int:

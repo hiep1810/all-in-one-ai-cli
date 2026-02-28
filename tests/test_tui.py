@@ -32,6 +32,7 @@ from aio.tui.app import (
     selected_line_range,
     selection_text,
     suggest_input,
+    toggle_focus,
 )
 
 
@@ -131,6 +132,11 @@ def test_complete_input_md_mode_value():
     assert out == "\\md mode rendered "
 
 
+def test_complete_input_md_focus_value():
+    out = complete_input("\\md focus ma", [])
+    assert out == "\\md focus markdown "
+
+
 def test_suggest_input_for_root_command():
     out = suggest_input("\\co", [])
     assert "config" in out
@@ -151,6 +157,7 @@ def test_suggest_input_for_md_subcommands():
     out = suggest_input("\\md ", [])
     assert "open" in out
     assert "mode" in out
+    assert "focus" in out
     assert "clear" in out
 
 
@@ -271,6 +278,11 @@ def test_selection_text():
 
 def test_selection_text_empty_when_no_selection():
     assert selection_text(["a"], None, 0) == ""
+
+
+def test_toggle_focus():
+    assert toggle_focus("input") == "markdown"
+    assert toggle_focus("markdown") == "input"
 
 
 def test_render_markdown_lines():
