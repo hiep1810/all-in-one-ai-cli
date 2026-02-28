@@ -45,6 +45,7 @@ Now `aio ask "hello"` will send requests to `POST /v1/chat/completions` on your 
 - `aio config set <key> <value>`
 - `aio tui`
 - `aio ask "..."`
+- `aio ask "..." --stream`
 - `aio chat "..." --session default`
 - `aio tool run <name> --arg k=v`
 - `aio tool run <name> --arg k=v --approve-risky`

@@ -30,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ask = sub.add_parser("ask", help="One-shot prompt")
     ask.add_argument("prompt")
+    ask.add_argument("--stream", action="store_true", help="Stream output when provider supports it")
 
     sub.add_parser("tui", help="Interactive terminal UI")
 
@@ -94,9 +95,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ask":
         client = get_client(config)
-        result = client.complete(args.prompt)
-        print(result)
-        logger.log({"cmd": "ask", "prompt": args.prompt})
+        if args.stream:
+            chunks: list[str] = []
+            for chunk in client.stream_complete(args.prompt):
+                print(chunk, end="", flush=True)
+                chunks.append(chunk)
+            print()
+            result = "".join(chunks)
+        else:
+            result = client.complete(args.prompt)
+            print(result)
+        logger.log({"cmd": "ask", "prompt": args.prompt, "stream": bool(args.stream)})
         return 0
 
     if args.command == "tui":
