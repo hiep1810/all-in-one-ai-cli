@@ -178,6 +178,28 @@ class TerminalUI:
             if key in {curses.KEY_PPAGE, curses.KEY_UP}:
                 self.markdown_scroll -= 3 if key == curses.KEY_UP else 12
                 return
+            if isinstance(key, str):
+                if key == "j":
+                    self.markdown_scroll += 1
+                    return
+                if key == "k":
+                    self.markdown_scroll -= 1
+                    return
+                if key == " ":
+                    self.markdown_scroll += 12
+                    return
+                if key == "d":
+                    self.markdown_scroll += 6
+                    return
+                if key == "u":
+                    self.markdown_scroll -= 6
+                    return
+                if key == "g":
+                    self.markdown_scroll = 0
+                    return
+                if key == "G":
+                    self.markdown_scroll = 999999
+                    return
 
         if _is_ctrl(key, 3):  # Ctrl+C
             self.pending_approval_raw, self.reverse_search_index, self.history_nav_index, self.history_nav_draft = (
@@ -392,35 +414,35 @@ class TerminalUI:
             tokens = shlex.split(raw[1:])
         except ValueError as exc:
             return f"Parse error: {exc}"
-        if not tokens or tokens[0] != "md":
-            return "Usage: \\md open <path> | \\md mode <raw|rendered> | \\md clear"
-
-        if len(tokens) >= 2 and tokens[1] == "clear":
-            self.markdown_path = None
-            self.markdown_raw_text = ""
+        if len(tokens) >= 2 and tokens[1] == "stash":
+            md_files = sorted([p for p in Path('.').rglob('*.md') if '.git' not in p.parts and '.venv' not in p.parts and '.aio' not in p.parts][:50])
+            if not md_files:
+                return "No markdown files found in current directory."
+            stash_text = "# Markdown Stash\n\nUse `\\md open <path>` to view.\n\n"
+            for f in md_files:
+                stash_text += f"•  {f}\n"
+            self.markdown_path = "stash"
+            self.markdown_raw_text = stash_text
             self.markdown_scroll = 0
-            if self.focus_target == "markdown":
-                self.focus_target = "input"
-            return "Markdown panel cleared."
-
-        if len(tokens) >= 3 and tokens[1] == "focus":
-            mode = tokens[2].strip().lower()
-            if mode not in {"input", "markdown"}:
-                return "Invalid focus. Use: input | markdown"
-            if mode == "markdown" and not self.markdown_path:
-                return "Open a markdown file first with \\md open <path>"
-            self.focus_target = mode
-            return f"Markdown focus set: {mode}"
-
-        if len(tokens) >= 3 and tokens[1] == "mode":
-            mode = tokens[2].strip().lower()
-            if mode not in {"raw", "rendered"}:
-                return "Invalid mode. Use: raw | rendered"
-            self.markdown_mode = mode
-            return f"Markdown mode set: {mode}"
+            self.focus_target = "markdown"
+            return "Stash loaded in markdown panel."
 
         if len(tokens) >= 3 and tokens[1] == "open":
-            path = Path(" ".join(tokens[2:]))
+            path_str = " ".join(tokens[2:])
+            if path_str.startswith("http://") or path_str.startswith("https://"):
+                import urllib.request
+                try:
+                    req = urllib.request.Request(path_str, headers={'User-Agent': 'aio-cli'})
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        text = response.read().decode('utf-8')
+                    self.markdown_path = path_str
+                    self.markdown_raw_text = text
+                    self.markdown_scroll = 0
+                    return f"Markdown loaded from URL: {path_str}"
+                except Exception as e:
+                    return f"Failed to fetch {path_str}: {e}"
+
+            path = Path(path_str)
             if not path.exists() or not path.is_file():
                 return f"Markdown file not found: {path}"
             text = path.read_text(encoding="utf-8")
@@ -429,7 +451,7 @@ class TerminalUI:
             self.markdown_scroll = 0
             return f"Markdown loaded: {path}"
 
-        return "Usage: \\md open <path> | \\md mode <raw|rendered> | \\md clear"
+        return "Usage: \\md open <path|url> | \\md stash | \\md mode <raw|rendered> | \\md clear"
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
@@ -1052,33 +1074,49 @@ def render_markdown_lines(text: str) -> list[str]:
         line = raw.rstrip()
         if line.startswith("```"):
             in_code = not in_code
+            if not in_code:
+                lines.append("")  # empty line after code block
+            else:
+                lines.append("")  # empty line before code block
             continue
         if in_code:
-            lines.append(f"  {line}")
+            # Subtle glow-like indentation for code blocks
+            lines.append(f"    │ {line}")
             continue
         stripped = line.lstrip()
         if stripped.startswith("#"):
             level = len(stripped) - len(stripped.lstrip("#"))
             title = stripped.lstrip("#").strip().upper()
             if title:
-                if level <= 1:
-                    banner = "=" * max(14, min(60, len(title) + 10))
-                    lines.append(banner)
-                    lines.append(f"==  {title}  ==")
-                    lines.append(banner)
+                lines.append("")
+                if level == 1:
+                    lines.append(f" █  {title}")
                 elif level == 2:
-                    lines.append(f"-- {title} --")
+                    lines.append(f" ▌ {title}")
+                elif level == 3:
+                    lines.append(f" ▎ {title}")
                 else:
-                    lines.append(f"[{title}]")
+                    lines.append(f"   {title}")
+                lines.append("")
             continue
         if stripped.startswith("- ") or stripped.startswith("* "):
-            lines.append(f"• {stripped[2:].strip()}")
+            lines.append(f"  • {stripped[2:].strip()}")
             continue
         if stripped.startswith("> "):
-            lines.append(f"| {stripped[2:].strip()}")
+            lines.append(f"  ▎ {stripped[2:].strip()}")
             continue
-        lines.append(stripped)
-    return lines
+        lines.append(f"  {stripped}" if stripped else "")
+    
+    # Remove excessive blank lines
+    cleaned: list[str] = []
+    prev_blank = False
+    for line in lines:
+        is_blank = not line.strip()
+        if is_blank and prev_blank:
+            continue
+        cleaned.append(line)
+        prev_blank = is_blank
+    return cleaned
 
 
 def reset_input_state(input_buffer: str) -> tuple[None, None, None, str]:
