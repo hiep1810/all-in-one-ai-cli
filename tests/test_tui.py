@@ -24,6 +24,7 @@ from aio.tui.app import (
     history_next,
     history_prev,
     insert_text,
+    render_markdown_lines,
     reset_input_state,
     reverse_search_prev,
     selected_line_range,
@@ -118,6 +119,11 @@ def test_complete_input_config_value_hint():
     assert out == "\\config set safety_level strict "
 
 
+def test_complete_input_md_command():
+    out = complete_input("\\md op", [])
+    assert out == "\\md open "
+
+
 def test_suggest_input_for_root_command():
     out = suggest_input("\\co", [])
     assert "config" in out
@@ -132,6 +138,12 @@ def test_suggest_input_for_tool_name():
 def test_suggest_input_for_config_value():
     out = suggest_input("\\config set safety_level ", [])
     assert "strict" in out
+
+
+def test_suggest_input_for_md_subcommands():
+    out = suggest_input("\\md ", [])
+    assert "open" in out
+    assert "clear" in out
 
 
 def test_history_prev_and_next_with_draft_restore():
@@ -251,6 +263,15 @@ def test_selection_text():
 
 def test_selection_text_empty_when_no_selection():
     assert selection_text(["a"], None, 0) == ""
+
+
+def test_render_markdown_lines():
+    text = "# Title\n- item\n> quote\n```\ncode\n```"
+    out = render_markdown_lines(text)
+    assert "[TITLE]" in out
+    assert "• item" in out
+    assert "| quote" in out
+    assert "  code" in out
 
 
 def test_tui_tool_risky_requires_approve_in_confirm_mode():

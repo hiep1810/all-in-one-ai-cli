@@ -70,6 +70,8 @@ Inside the UI, type commands and press Enter:
 - `\\tool shell.exec cmd='echo hi' --approve-risky`
 - `\\history 20`
 - `\\clear`
+- `\\md open README.md`
+- `\\md clear`
 - `\\save`
 - `\\copylast`
 - `\\config show`
@@ -91,6 +93,7 @@ Tips:
 - `Delete` removes char at cursor, `Ctrl+W` deletes the previous word.
 - `Ctrl+S` enters output selection mode, `Up/Down` selects lines, `Ctrl+Y` copies selection.
 - `Esc` cancels pending approval/search state and resets input navigation.
+- `\\md open <path>` renders markdown in a side panel next to chat.
 - Plain chat uses provider streaming when available (`llama.cpp` OpenAI-compatible stream).
 - In `confirm` safety mode, risky `\\tool`/`\\agent` commands prompt `Approve risky action? [y/N]`.
 

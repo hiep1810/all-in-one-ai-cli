@@ -22,6 +22,8 @@ from aio.workflows.runner import run_workflow
 
 HELP_TEXT = """Commands:
   \\help
+  \\md open <path>
+  \\md clear
   \\agent <goal> [--approve-risky]
   \\chat <session> <message>
   \\tool <name> [k=v ...] [--approve-risky]
@@ -42,6 +44,7 @@ Main mode:
 CLEAR_SIGNAL = "[[AIO_CLEAR_SCREEN]]"
 SLASH_COMMANDS = [
     "help",
+    "md",
     "agent",
     "chat",
     "tool",
@@ -94,6 +97,8 @@ class TerminalUI:
         self.selection_mode = False
         self.selection_anchor: int | None = None
         self.selection_cursor: int | None = None
+        self.markdown_path: str | None = None
+        self.markdown_lines: list[str] = []
         self.history_nav_index: int | None = None
         self.history_nav_draft = ""
         self.reverse_search_index: int | None = None
@@ -192,16 +197,20 @@ class TerminalUI:
                     return
                 self.add_output(f"> {raw}")
                 if raw.startswith("\\"):
-                    output = execute_line(self.ctx, raw)
-                    if output == CLEAR_SIGNAL:
-                        self.lines = []
-                        self.add_output("Screen cleared.")
-                    elif _requires_approval(output):
-                        self.pending_approval_raw = raw
-                        self.add_output(output)
-                        self.add_output("Approve risky action? [y/N]")
+                    if raw.startswith("\\md"):
+                        self.ctx.command_history.append(raw.strip())
+                        self.add_output(self._handle_markdown_command(raw))
                     else:
-                        self.add_output(output)
+                        output = execute_line(self.ctx, raw)
+                        if output == CLEAR_SIGNAL:
+                            self.lines = []
+                            self.add_output("Screen cleared.")
+                        elif _requires_approval(output):
+                            self.pending_approval_raw = raw
+                            self.add_output(output)
+                            self.add_output("Approve risky action? [y/N]")
+                        else:
+                            self.add_output(output)
                 else:
                     self._handle_chat_input(raw)
             self.input_buffer = ""
@@ -357,6 +366,30 @@ class TerminalUI:
             input_len=len(self.input_buffer),
         )
 
+    def _handle_markdown_command(self, raw: str) -> str:
+        try:
+            tokens = shlex.split(raw[1:])
+        except ValueError as exc:
+            return f"Parse error: {exc}"
+        if not tokens or tokens[0] != "md":
+            return "Usage: \\md open <path> | \\md clear"
+
+        if len(tokens) >= 2 and tokens[1] == "clear":
+            self.markdown_path = None
+            self.markdown_lines = []
+            return "Markdown panel cleared."
+
+        if len(tokens) >= 3 and tokens[1] == "open":
+            path = Path(" ".join(tokens[2:]))
+            if not path.exists() or not path.is_file():
+                return f"Markdown file not found: {path}"
+            text = path.read_text(encoding="utf-8")
+            self.markdown_path = str(path)
+            self.markdown_lines = render_markdown_lines(text)
+            return f"Markdown loaded: {path}"
+
+        return "Usage: \\md open <path> | \\md clear"
+
     def _init_colors(self) -> None:
         if not curses.has_colors():
             self.use_color = False
@@ -453,6 +486,10 @@ class TerminalUI:
 
         self.screen.erase()
         height, width = self.screen.getmaxyx()
+        split_markdown = bool(self.markdown_lines) and width >= 80
+        left_width = width if not split_markdown else max(30, (width * 3 // 5))
+        right_x = left_width + 1
+        right_width = max(0, width - right_x)
         header_lines = self.theme["logo"]
         subhead = str(self.theme["subtitle"])
         hint = str(self.theme["hint"])
@@ -461,14 +498,14 @@ class TerminalUI:
         y = 0
         for idx, line in enumerate(header_lines):
             style = self._style(1 if idx % 2 == 0 else 2, bold=True)
-            self._draw(y, 0, line[: max(0, width - 1)], width - 1, style)
+            self._draw(y, 0, line[: max(0, left_width - 1)], left_width - 1, style)
             y += 1
 
-        self._draw(y, 0, subhead, width - 1, self._style(5, bold=True))
+        self._draw(y, 0, subhead, left_width - 1, self._style(5, bold=True))
         y += 1
-        self._draw(y, 0, hint, width - 1, self._style(4))
+        self._draw(y, 0, hint, left_width - 1, self._style(4))
         y += 1
-        self._draw(y, 0, divider_char * max(1, width - 1), width - 1, self._style(2))
+        self._draw(y, 0, divider_char * max(1, left_width - 1), left_width - 1, self._style(2))
         y += 1
 
         bottom_reserved = 3
@@ -476,7 +513,7 @@ class TerminalUI:
 
         wrapped: list[tuple[int, str]] = []
         for src_idx, line in enumerate(self.lines):
-            parts = textwrap.wrap(line, width=max(10, width - 1)) or [""]
+            parts = textwrap.wrap(line, width=max(10, left_width - 1)) or [""]
             for part in parts:
                 wrapped.append((src_idx, part))
 
@@ -486,7 +523,21 @@ class TerminalUI:
             attr = 0
             if sel_range is not None and sel_range[0] <= src_idx <= sel_range[1]:
                 attr = self._style(4, bold=True) | curses.A_REVERSE
-            self._draw(y + idx, 0, line, width - 1, attr)
+            self._draw(y + idx, 0, line, left_width - 1, attr)
+
+        if split_markdown and right_width > 8:
+            for row in range(y - 1, height - 1):
+                self._draw(row, left_width, "│", 1, self._style(2))
+            md_title = "Markdown"
+            if self.markdown_path is not None:
+                md_title = f"Markdown: {Path(self.markdown_path).name}"
+            self._draw(y - 1, right_x, md_title, right_width - 1, self._style(5, bold=True))
+            wrapped_md: list[str] = []
+            for line in self.markdown_lines:
+                wrapped_md.extend(textwrap.wrap(line, width=max(8, right_width - 1)) or [""])
+            md_visible = wrapped_md[-output_height:]
+            for idx, line in enumerate(md_visible):
+                self._draw(y + idx, right_x, line, right_width - 1, self._style(4))
 
         if self.pending_approval_raw is not None:
             hint_text = "approval> type y/yes to approve, anything else to cancel"
@@ -751,6 +802,13 @@ def complete_input(buffer: str, tool_names: list[str]) -> str:
             return _complete_token(buffer, body, parts[1], tool_names)
         return buffer
 
+    if cmd == "md":
+        if len(parts) == 1:
+            return _complete_token(buffer, body, "", ["open", "clear"])
+        if len(parts) == 2 and not trailing_space:
+            return _complete_token(buffer, body, parts[1], ["open", "clear"])
+        return buffer
+
     if cmd == "config":
         if len(parts) == 1:
             return _complete_token(buffer, body, "", ["show", "set"])
@@ -793,6 +851,13 @@ def suggest_input(buffer: str, tool_names: list[str], limit: int = 4) -> list[st
             return tool_names[:limit]
         if len(parts) == 2 and not trailing_space:
             return _match_candidates(parts[1], tool_names)[:limit]
+        return []
+
+    if cmd == "md":
+        if len(parts) == 1 and trailing_space:
+            return ["open", "clear"][:limit]
+        if len(parts) == 2 and not trailing_space:
+            return _match_candidates(parts[1], ["open", "clear"])[:limit]
         return []
 
     if cmd == "config":
@@ -887,6 +952,33 @@ def selection_text(lines: list[str], anchor: int | None, cursor: int | None) -> 
 def cursor_from_click(mouse_x: int, prompt_prefix_len: int, input_len: int) -> int:
     raw = mouse_x - prompt_prefix_len
     return max(0, min(raw, input_len))
+
+
+def render_markdown_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    in_code = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            lines.append(f"  {line}")
+            continue
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            title = stripped.lstrip("#").strip().upper()
+            if title:
+                lines.append(f"[{title}]")
+            continue
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            lines.append(f"• {stripped[2:].strip()}")
+            continue
+        if stripped.startswith("> "):
+            lines.append(f"| {stripped[2:].strip()}")
+            continue
+        lines.append(stripped)
+    return lines
 
 
 def reset_input_state(input_buffer: str) -> tuple[None, None, None, str]:
