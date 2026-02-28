@@ -65,6 +65,10 @@ Inside the UI, type commands and press Enter:
 - `\\help`
 - `\\agent fix failing tests`
 - `\\tool fs.search root=. query=TODO`
+- `\\history 20`
+- `\\clear`
+- `\\save`
+- `\\copylast`
 - `\\config show`
 - `\\config set model_provider llama_cpp`
 - `\\config set tui_theme matrix`

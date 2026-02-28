@@ -3,9 +3,12 @@ from __future__ import annotations
 import curses
 import json
 import shlex
+import subprocess
 import textwrap
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from shutil import which
 
 from aio.agent.executor import AgentExecutor
 from aio.config.loader import config_to_dict, load_config, update_config
@@ -20,6 +23,10 @@ HELP_TEXT = """Commands:
   \\chat <session> <message>
   \\tool <name> [k=v ...]
   \\tools
+  \\history [n]
+  \\clear
+  \\save [path]
+  \\copylast
   \\workflow <path>
   \\replay <logfile>
   \\config show
@@ -28,6 +35,8 @@ HELP_TEXT = """Commands:
 Main mode:
   Type any text without leading "\\" to chat directly with AI.
 """
+
+CLEAR_SIGNAL = "[[AIO_CLEAR_SCREEN]]"
 
 
 class ExitTUI(Exception):
@@ -41,6 +50,8 @@ class TUIContext:
     store: SessionStore
     registry: ToolRegistry
     executor: AgentExecutor
+    command_history: list[str]
+    last_response: str
 
 
 class TerminalUI:
@@ -62,6 +73,8 @@ class TerminalUI:
             store=SessionStore(),
             registry=registry,
             executor=AgentExecutor(config, registry),
+            command_history=[],
+            last_response="",
         )
 
     def add_output(self, text: str) -> None:
@@ -93,7 +106,11 @@ class TerminalUI:
             if raw:
                 self.add_output(f"> {raw}")
                 output = execute_line(self.ctx, raw)
-                self.add_output(output)
+                if output == CLEAR_SIGNAL:
+                    self.lines = []
+                    self.add_output("Screen cleared.")
+                else:
+                    self.add_output(output)
             self.input_buffer = ""
             return
 
@@ -249,12 +266,14 @@ class TerminalUI:
 def execute_line(ctx: TUIContext, raw: str) -> str:
     if not raw.strip():
         return ""
+    ctx.command_history.append(raw.strip())
 
     if not raw.startswith("\\"):
         from aio.llm.router import get_client
 
         prompt = raw.strip()
         result = str(get_client(ctx.config).complete(prompt))
+        ctx.last_response = result
         ctx.store.append("main", {"role": "user", "content": prompt})
         ctx.store.append("main", {"role": "assistant", "content": result})
         ctx.logger.log({"cmd": "ask", "prompt": prompt, "via": "tui"})
@@ -281,13 +300,50 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
     if cmd == "tools":
         return "\n".join(ctx.registry.list_tools())
 
+    if cmd == "history":
+        limit = 20
+        if len(tokens) > 1:
+            try:
+                limit = max(1, int(tokens[1]))
+            except ValueError:
+                return "Usage: \\history [n]"
+        recent = ctx.command_history[-limit:]
+        if not recent:
+            return "No history yet."
+        return "\n".join(f"{idx + 1}. {line}" for idx, line in enumerate(recent))
+
+    if cmd == "clear":
+        return CLEAR_SIGNAL
+
+    if cmd == "save":
+        if len(tokens) > 2:
+            return "Usage: \\save [path]"
+        if len(tokens) == 2:
+            out_path = Path(tokens[1])
+        else:
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            out_path = Path(".aio/sessions") / f"tui-export-{stamp}.txt"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        transcript = "\n".join(ctx.command_history) + "\n"
+        out_path.write_text(transcript, encoding="utf-8")
+        return f"Saved transcript to {out_path}"
+
+    if cmd == "copylast":
+        if not ctx.last_response:
+            return "No AI response to copy yet."
+        copied = _copy_to_clipboard(ctx.last_response)
+        if copied:
+            return "Copied last AI response to clipboard."
+        return "Clipboard tool not found. Last response kept in memory."
+
     if cmd == "agent":
         goal = " ".join(tokens[1:]).strip()
         if not goal:
             return "Usage: \\agent <goal>"
         result = ctx.executor.run(goal)
+        ctx.last_response = json.dumps(result, indent=2)
         ctx.logger.log({"cmd": "agent.run", "goal": goal, "via": "tui"})
-        return json.dumps(result, indent=2)
+        return ctx.last_response
 
     if cmd == "chat":
         if len(tokens) < 3:
@@ -309,15 +365,17 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
             k, v = kv.split("=", 1)
             kwargs[k] = v
         result = ctx.registry.run(name, **kwargs)
+        ctx.last_response = str(result)
         ctx.logger.log({"cmd": "tool.run", "name": name, "via": "tui"})
-        return str(result)
+        return ctx.last_response
 
     if cmd == "workflow":
         if len(tokens) != 2:
             return "Usage: \\workflow <path>"
         result = run_workflow(tokens[1])
+        ctx.last_response = str(result)
         ctx.logger.log({"cmd": "workflow.run", "path": tokens[1], "via": "tui"})
-        return str(result)
+        return ctx.last_response
 
     if cmd == "replay":
         if len(tokens) != 2:
@@ -341,6 +399,23 @@ def execute_line(ctx: TUIContext, raw: str) -> str:
         return "Usage: \\config show | \\config set <key> <value>"
 
     return f"Unknown command: {cmd}. Type '\\help'"
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    commands = [
+        ["pbcopy"],
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+    ]
+    for cmd in commands:
+        if which(cmd[0]) is None:
+            continue
+        try:
+            subprocess.run(cmd, input=text, text=True, check=True, capture_output=True)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 def run_tui() -> int:
