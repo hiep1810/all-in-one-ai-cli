@@ -77,6 +77,10 @@ class AIOConsole(App):
     #md-viewer, #md-editor {
         width: 100%;
         height: 100%;
+        border: solid panel;
+    }
+    #md-viewer:focus, #md-editor:focus {
+        border: solid $accent;
     }
     #suggest-popup {
         layer: overlay;
@@ -296,11 +300,14 @@ class AIOConsole(App):
 
     def _exit_edit_mode(self) -> None:
         self.remove_class("-editing")
-        # To practically "unbind", we map to pass and hide them from footer
-        self.bind("ctrl+s", "pass", show=False)
-        self.bind("escape", "pass", show=False)
-        self._bindings.bind("ctrl+s", "pass")
-        self._bindings.bind("escape", "pass")
+        
+        keys_to_remove = []
+        for key, binding in self._bindings.keys.items():
+            if binding.action in ("save_markdown", "cancel_edit"):
+                keys_to_remove.append(key)
+        for key in keys_to_remove:
+            del self._bindings.keys[key]
+            
         self.app.refresh_bindings()
         
         switcher = self.query_one("#md-view", ContentSwitcher)
