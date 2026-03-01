@@ -11,6 +11,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Header, Footer, Input, Markdown, RichLog, ContentSwitcher, TextArea
+from textual.suggester import SuggestFromList
 
 from aio.agent.executor import AgentExecutor
 from aio.agent.safety import should_block_tool
@@ -114,6 +115,7 @@ class AIOConsole(App):
         self.last_response = ""
         self.pending_approval_raw: str | None = None
         self.current_md_path: Path | None = None
+        self.history_index: int = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -131,7 +133,16 @@ class AIOConsole(App):
         log = self.query_one("#chat-log", RichLog)
         log.write("[bold cyan]AIO Console ready.[/bold cyan] Chat directly, or use [yellow]\\help[/yellow] for commands.")
         inp = self.query_one("#input", Input)
-        inp.history = self.command_history
+        
+        # Build suggester list
+        base_cmds = [
+            r"\help", r"\clear", r"\history", r"\tools", r"\save ", r"\exit",
+            r"\chat ", r"\agent ", r"\workflow ", r"\config "
+        ]
+        md_cmds = [r"\md open ", r"\md stash", r"\md clear"]
+        tool_cmds = [f"\\tool {t} " for t in self.registry.list_tools()]
+        inp.suggester = SuggestFromList(base_cmds + md_cmds + tool_cmds, case_sensitive=False)
+        
         inp.focus()
 
     def action_toggle_markdown_focus(self) -> None:
@@ -145,6 +156,30 @@ class AIOConsole(App):
                     self.query_one("#md-editor", TextArea).focus()
         else:
             inp.focus()
+
+    from textual import events
+    
+    def on_key(self, event: events.Key) -> None:
+        inp = self.query_one("#input", Input)
+        if not inp.has_focus:
+            return
+            
+        if event.key == "up":
+            if self.command_history and self.history_index > 0:
+                self.history_index -= 1
+                inp.value = self.command_history[self.history_index]
+                inp.action_end()
+            event.prevent_default()
+            
+        elif event.key == "down":
+            if self.command_history and self.history_index < len(self.command_history) - 1:
+                self.history_index += 1
+                inp.value = self.command_history[self.history_index]
+                inp.action_end()
+            elif self.history_index == len(self.command_history) - 1:
+                self.history_index = len(self.command_history)
+                inp.value = ""
+            event.prevent_default()
 
     def action_clear_log(self) -> None:
         self.query_one("#chat-log", RichLog).clear()
@@ -205,7 +240,7 @@ class AIOConsole(App):
 
         log.write(f"> [bold]{raw}[/bold]")
         self.command_history.append(raw)
-        self.query_one("#input", Input).history = self.command_history
+        self.history_index = len(self.command_history)
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._history_file.write_text(json.dumps(self.command_history[-100:]), encoding="utf-8")
         
