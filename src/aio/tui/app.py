@@ -140,7 +140,9 @@ class AIOConsole(App):
         with Horizontal(id="main-container"):
             yield RichLog(id="chat-log", markup=True, highlight=True)
             with ContentSwitcher(initial="md-viewer", id="md-view"):
-                yield Markdown(id="md-viewer")
+                md = Markdown(id="md-viewer")
+                md.can_focus = True
+                yield md
                 yield TextArea(id="md-editor", language="markdown")
         yield OptionList(id="suggest-popup")
         yield Input(placeholder="cmd> ", id="input")
