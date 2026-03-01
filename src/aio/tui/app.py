@@ -54,6 +54,12 @@ class AIOConsole(App):
         height: 1fr;
         layer: base;
     }
+    AIOConsole.-editing #chat-log {
+        display: none;
+    }
+    AIOConsole.-editing #input {
+        display: none;
+    }
     #chat-log {
         width: 1fr;
         height: 100%;
@@ -114,7 +120,6 @@ class AIOConsole(App):
         ("ctrl+l", "clear_log", "Clear Log"),
         ("ctrl+p", "open_palette", "Command Palette"),
         ("e", "edit_markdown", "Edit MD"),
-        ("ctrl+s", "save_markdown", "Save MD"),
     ]
 
     def __init__(self):
@@ -259,6 +264,9 @@ class AIOConsole(App):
     def action_clear_log(self) -> None:
         self.query_one("#chat-log", RichLog).clear()
 
+    def action_pass(self) -> None:
+        pass
+
     def action_open_palette(self) -> None:
         tools = self.registry.list_tools()
         def on_selected(command: str):
@@ -275,9 +283,34 @@ class AIOConsole(App):
             
         md_editor = self.query_one("#md-editor", TextArea)
         if self.current_md_path:
+            self.add_class("-editing")
+            self.bind("ctrl+s", "save_markdown", description="Save MD", show=True)
+            self.bind("escape", "cancel_edit", description="Cancel Edit", show=True)
+            self._bindings.bind("ctrl+s", "save_markdown")
+            self._bindings.bind("escape", "cancel_edit")
+            self.app.refresh_bindings()
+            
             md_editor.text = self.current_md_path.read_text(encoding="utf-8")
             switcher.current = "md-editor"
             md_editor.focus()
+
+    def _exit_edit_mode(self) -> None:
+        self.remove_class("-editing")
+        # To practically "unbind", we map to pass and hide them from footer
+        self.bind("ctrl+s", "pass", show=False)
+        self.bind("escape", "pass", show=False)
+        self._bindings.bind("ctrl+s", "pass")
+        self._bindings.bind("escape", "pass")
+        self.app.refresh_bindings()
+        
+        switcher = self.query_one("#md-view", ContentSwitcher)
+        switcher.current = "md-viewer"
+        self.query_one("#input", Input).focus()
+
+    def action_cancel_edit(self) -> None:
+        switcher = self.query_one("#md-view", ContentSwitcher)
+        if switcher.current == "md-editor":
+            self._exit_edit_mode()
 
     def action_save_markdown(self) -> None:
         switcher = self.query_one("#md-view", ContentSwitcher)
@@ -290,8 +323,7 @@ class AIOConsole(App):
         if self.current_md_path:
             self.current_md_path.write_text(md_editor.text, encoding="utf-8")
             md_viewer.update(md_editor.text)
-            switcher.current = "md-viewer"
-            self.query_one("#input", Input).focus()
+            self._exit_edit_mode()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         raw = event.value.strip()

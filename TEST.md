@@ -1,4 +1,4 @@
-# Sample Markdown Table
+## Sample Markdown Table
 
 This is an example Markdown file that contains a table.
 
