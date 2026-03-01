@@ -172,7 +172,19 @@ class AIOConsole(App):
             popup.remove_class("-visible")
             return
             
-        matches = [c for c in self.all_commands if val.lower() in c.lower()]
+        val_lower = val.lower()
+        seen = set()
+        recent_unique_history = []
+        for cmd in reversed(self.command_history):
+            if cmd not in seen:
+                seen.add(cmd)
+                recent_unique_history.append(cmd)
+                
+        history_matches = [c for c in recent_unique_history if val_lower in c.lower()]
+        default_matches = [c for c in self.all_commands if val_lower in c.lower() and c not in seen]
+        
+        matches = history_matches + default_matches
+        
         if not matches:
             popup.remove_class("-visible")
             return
