@@ -7,8 +7,8 @@ name = "all-in-one-ai-cli"
 version = "0.1.0"
 description = "All-in-one AI CLI scaffold"
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.8"
+dependencies = ["textual>=0.50.0"]
 
 [project.scripts]
 aio = "aio.cli:main"

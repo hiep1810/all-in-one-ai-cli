@@ -110,7 +110,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "tui":
         from aio.tui.app import run_tui
-
         return run_tui()
 
     if args.command == "chat":
