@@ -67,6 +67,22 @@ class AIOConsole(App):
         margin: 0;
         border: solid panel;
     }
+    
+    MarkdownH1 {
+        background: $accent;
+        color: $text;
+        border: solid $accent;
+        padding: 1 2;
+        content-align: center middle;
+        text-style: bold;
+    }
+    
+    MarkdownH2 {
+        border-bottom: solid $accent;
+        color: $text-muted;
+        padding-top: 1;
+        text-style: bold;
+    }
     """
     
     BINDINGS = [
