@@ -473,13 +473,21 @@ class AIOConsole(App):
     @work(exclusive=True, thread=True)
     def _handle_chat_background(self, prompt: str) -> None:
         client = get_client(self.config)
+        import time
+        start_time = time.time()
         try:
             result = client.complete(prompt)
-            self.call_from_thread(self._on_chat_complete, prompt, str(result))
+            elapsed = time.time() - start_time
+            # Rough token estimate: ~4 chars per token
+            token_count = len(str(result)) // 4
+            tps = token_count / elapsed if elapsed > 0 else 0
+            
+            stats_msg = f"[dim italic]({token_count} tokens | {elapsed:.2f}s | {tps:.1f} t/s)[/dim italic]"
+            self.call_from_thread(self._on_chat_complete, prompt, str(result), stats_msg)
         except Exception as exc:
             self.call_from_thread(self._on_chat_error, str(exc))
 
-    def _on_chat_complete(self, prompt: str, result: str) -> None:
+    def _on_chat_complete(self, prompt: str, result: str, stats_msg: str = "") -> None:
         log = self.query_one("#chat-log", RichLog)
         inp = self.query_one("#input", Input)
         self.last_response = result
@@ -487,6 +495,8 @@ class AIOConsole(App):
         self.store.append("main", {"role": "assistant", "content": result})
         self.logger_audit.log({"cmd": "ask", "prompt": prompt, "via": "tui"})
         log.write(f"[cyan]ai>[/cyan] {result}")
+        if stats_msg:
+            log.write(stats_msg)
         inp.disabled = False
         inp.focus()
 
