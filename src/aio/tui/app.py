@@ -10,8 +10,7 @@ import urllib.error
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Header, Footer, Input, Markdown, RichLog, ContentSwitcher, TextArea
-from textual.suggester import SuggestFromList
+from textual.widgets import Header, Footer, Input, Markdown, RichLog, ContentSwitcher, TextArea, OptionList
 
 from aio.agent.executor import AgentExecutor
 from aio.agent.safety import should_block_tool
@@ -47,8 +46,12 @@ Main mode:
 
 class AIOConsole(App):
     CSS = """
+    AIOConsole {
+        layers: base overlay;
+    }
     #main-container {
         layout: horizontal;
+        layer: base;
     }
     #chat-log {
         width: 1fr;
@@ -68,7 +71,22 @@ class AIOConsole(App):
         width: 100%;
         height: 100%;
     }
+    #suggest-popup {
+        layer: overlay;
+        display: none;
+        dock: bottom;
+        margin-bottom: 3;
+        width: 50%;
+        max-width: 60;
+        max-height: 8;
+        background: $surface;
+        border: solid $accent;
+    }
+    #suggest-popup.-visible {
+        display: block;
+    }
     #input {
+        layer: base;
         dock: bottom;
         margin: 0;
         border: solid panel;
@@ -124,6 +142,7 @@ class AIOConsole(App):
             with ContentSwitcher(initial="md-viewer", id="md-view"):
                 yield Markdown(id="md-viewer")
                 yield TextArea(id="md-editor", language="markdown")
+        yield OptionList(id="suggest-popup")
         yield Input(placeholder="cmd> ", id="input")
         yield Footer()
 
@@ -141,9 +160,27 @@ class AIOConsole(App):
         ]
         md_cmds = [r"\md open ", r"\md stash", r"\md clear"]
         tool_cmds = [f"\\tool {t} " for t in self.registry.list_tools()]
-        inp.suggester = SuggestFromList(base_cmds + md_cmds + tool_cmds, case_sensitive=False)
+        self.all_commands = base_cmds + md_cmds + tool_cmds
         
         inp.focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        val = event.value
+        popup = self.query_one("#suggest-popup", OptionList)
+        
+        if not val or not val.startswith("\\"):
+            popup.remove_class("-visible")
+            return
+            
+        matches = [c for c in self.all_commands if val.lower() in c.lower()]
+        if not matches:
+            popup.remove_class("-visible")
+            return
+            
+        popup.clear_options()
+        popup.add_options(matches)
+        popup.highlighted = 0
+        popup.add_class("-visible")
 
     def action_toggle_markdown_focus(self) -> None:
         md_view = self.query_one("#md-view", ContentSwitcher)
@@ -164,11 +201,34 @@ class AIOConsole(App):
         if not inp.has_focus:
             return
             
+        popup = self.query_one("#suggest-popup", OptionList)
+        if popup.has_class("-visible"):
+            if event.key == "up":
+                if popup.highlighted is not None and popup.highlighted > 0:
+                    popup.highlighted -= 1
+                event.prevent_default()
+                return
+            elif event.key == "down":
+                if popup.highlighted is not None and popup.highlighted < popup.option_count - 1:
+                    popup.highlighted += 1
+                event.prevent_default()
+                return
+            elif event.key == "tab":
+                if popup.highlighted is not None:
+                    opt = popup.get_option_at_index(popup.highlighted)
+                    inp.value = str(opt.prompt)
+                    inp.cursor_position = len(inp.value)
+                    popup.remove_class("-visible")
+                event.prevent_default()
+                return
+
+        # Fallback to history navigating if popup not active or not intercepting
         if event.key == "up":
             if self.command_history and self.history_index > 0:
                 self.history_index -= 1
                 inp.value = self.command_history[self.history_index]
                 inp.action_end()
+                popup.remove_class("-visible")
             event.prevent_default()
             
         elif event.key == "down":
@@ -217,6 +277,8 @@ class AIOConsole(App):
         raw = event.value.strip()
         inp = self.query_one("#input", Input)
         inp.value = ""
+        popup = self.query_one("#suggest-popup", OptionList)
+        popup.remove_class("-visible")
         log = self.query_one("#chat-log", RichLog)
 
         if not raw:
