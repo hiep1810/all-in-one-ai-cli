@@ -69,7 +69,11 @@ class AIOConsole(App):
         width: 1fr;
         height: 100%;
         display: none;
-        padding: 1;
+        padding: 0 1;
+        border: solid panel;
+    }
+    #md-view:focus-within {
+        border: solid $accent;
     }
     #md-view.-visible {
         display: block;
@@ -77,10 +81,6 @@ class AIOConsole(App):
     #md-viewer, #md-editor {
         width: 100%;
         height: 100%;
-        border: solid panel;
-    }
-    #md-viewer:focus, #md-editor:focus {
-        border: solid $accent;
     }
     #suggest-popup {
         layer: overlay;
@@ -120,10 +120,8 @@ class AIOConsole(App):
     """
     
     BINDINGS = [
-        ("ctrl+o", "toggle_markdown_focus", "Toggle Focus (Chat/MD)"),
         ("ctrl+l", "clear_log", "Clear Log"),
         ("ctrl+p", "open_palette", "Command Palette"),
-        ("e", "edit_markdown", "Edit MD"),
     ]
 
     def __init__(self):
@@ -375,6 +373,21 @@ class AIOConsole(App):
             log.write("[italic green]ai thinking...[/italic green]")
             self._handle_chat_background(raw)
 
+    def _manage_md_bindings(self, visible: bool) -> None:
+        if visible:
+            self.bind("ctrl+o", "toggle_markdown_focus", description="Toggle Focus (Chat/MD)", show=True)
+            self.bind("e", "edit_markdown", description="Edit MD", show=True)
+            self._bindings.bind("ctrl+o", "toggle_markdown_focus")
+            self._bindings.bind("e", "edit_markdown")
+        else:
+            keys_to_remove = []
+            for key, binding in self._bindings.keys.items():
+                if binding.action in ("toggle_markdown_focus", "edit_markdown"):
+                    keys_to_remove.append(key)
+            for key in keys_to_remove:
+                del self._bindings.keys[key]
+        self.app.refresh_bindings()
+
     def _handle_markdown_command(self, raw: str) -> None:
         log = self.query_one("#chat-log", RichLog)
         md_viewer = self.query_one("#md-viewer", Markdown)
@@ -394,6 +407,7 @@ class AIOConsole(App):
             md_view_container.remove_class("-visible")
             md_viewer.update("")
             self.current_md_path = None
+            self._manage_md_bindings(False)
             log.write("Markdown panel cleared.")
             return
 
@@ -408,6 +422,7 @@ class AIOConsole(App):
             md_viewer.update(stash_text)
             md_view_container.current = "md-viewer"
             md_view_container.add_class("-visible")
+            self._manage_md_bindings(True)
             self.current_md_path = None
             return
 
@@ -421,6 +436,7 @@ class AIOConsole(App):
                     md_viewer.update(text)
                     md_view_container.current = "md-viewer"
                     md_view_container.add_class("-visible")
+                    self._manage_md_bindings(True)
                     self.current_md_path = None
                     log.write(f"Markdown loaded from URL: {path_str}")
                 except Exception as e:
@@ -436,6 +452,7 @@ class AIOConsole(App):
             md_viewer.update(text)
             md_view_container.current = "md-viewer"
             md_view_container.add_class("-visible")
+            self._manage_md_bindings(True)
             self.current_md_path = path
             log.write(f"Markdown loaded: {path}")
             return
