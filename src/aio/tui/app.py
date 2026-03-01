@@ -14,7 +14,8 @@ from textual.widgets import Header, Footer, Input, Markdown, RichLog, ContentSwi
 
 from aio.agent.executor import AgentExecutor
 from aio.agent.safety import should_block_tool
-from aio.config.loader import config_to_dict, load_config, update_config
+from aio.config.loader import config_to_dict, load_config, update_config, save_config
+from aio.config.connections import load_connection_presets
 from aio.logging.audit import AuditLogger
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
@@ -168,9 +169,13 @@ class AIOConsole(App):
             r"\help", r"\clear", r"\history", r"\tools", r"\save ", r"\exit",
             r"\chat ", r"\agent ", r"\workflow ", r"\config "
         ]
+        
+        presets = load_connection_presets()
+        connect_cmds = [rf"\connect {k}" for k in presets.keys()]
+        
         md_cmds = [r"\md open ", r"\md stash", r"\md clear"]
         tool_cmds = [f"\\tool {t} " for t in self.registry.list_tools()]
-        self.all_commands = base_cmds + md_cmds + tool_cmds
+        self.all_commands = base_cmds + connect_cmds + md_cmds + tool_cmds
         
         inp.focus()
 
@@ -518,6 +523,29 @@ class AIOConsole(App):
 
         if cmd in {"exit", "quit"}:
             self.exit()
+            return
+            
+        if cmd == "connect":
+            presets = load_connection_presets()
+            if len(tokens) < 2:
+                available = ", ".join(presets.keys())
+                log.write(f"Usage: \\connect <target> [model_name]\nAvailable targets: {available}")
+                return
+            target = tokens[1]
+            if target not in presets:
+                available = ", ".join(presets.keys())
+                log.write(f"[red]Unknown target:[/red] {target}. Available targets: {available}")
+                return
+            
+            preset = presets[target]
+            self.config.model_provider = preset["provider"]
+            self.config.model_base_url = preset["url"]
+            self.config.model_name = tokens[2] if len(tokens) > 2 else preset["default_model"]
+            save_config(self.config)
+            
+            log.write(f"[green]Successfully connected to {target}[/green]")
+            log.write(f"Provider: {self.config.model_provider} | URL: {self.config.model_base_url} | Model: {self.config.model_name}")
+            self.sub_title = f"Provider: {self.config.model_provider} • Model: {self.config.model_name}"
             return
 
         if cmd == "tools":
