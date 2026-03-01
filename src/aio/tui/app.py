@@ -300,11 +300,11 @@ class AIOConsole(App):
         self.remove_class("-editing")
         
         keys_to_remove = []
-        for key, binding in self._bindings.keys.items():
-            if binding.action in ("save_markdown", "cancel_edit"):
+        for key, bindings in self._bindings.key_to_bindings.items():
+            if any(getattr(b, "action", "") in ("save_markdown", "cancel_edit") for b in bindings):
                 keys_to_remove.append(key)
         for key in keys_to_remove:
-            del self._bindings.keys[key]
+            self._bindings.key_to_bindings.pop(key, None)
             
         self.app.refresh_bindings()
         
@@ -377,16 +377,22 @@ class AIOConsole(App):
         if visible:
             self.bind("ctrl+o", "toggle_markdown_focus", description="Toggle Focus (Chat/MD)", show=True)
             self.bind("e", "edit_markdown", description="Edit MD", show=True)
+            self.bind("ctrl+x", "close_markdown", description="Close MD", show=True)
             self._bindings.bind("ctrl+o", "toggle_markdown_focus")
             self._bindings.bind("e", "edit_markdown")
+            self._bindings.bind("ctrl+x", "close_markdown")
         else:
             keys_to_remove = []
-            for key, binding in self._bindings.keys.items():
-                if binding.action in ("toggle_markdown_focus", "edit_markdown"):
+            for key, bindings in self._bindings.key_to_bindings.items():
+                if any(getattr(b, "action", "") in ("toggle_markdown_focus", "edit_markdown", "close_markdown") for b in bindings):
                     keys_to_remove.append(key)
             for key in keys_to_remove:
-                del self._bindings.keys[key]
+                self._bindings.key_to_bindings.pop(key, None)
         self.app.refresh_bindings()
+
+    def action_close_markdown(self) -> None:
+        self._handle_markdown_command("\\md clear")
+        self.query_one("#input", Input).focus()
 
     def _handle_markdown_command(self, raw: str) -> None:
         log = self.query_one("#chat-log", RichLog)
