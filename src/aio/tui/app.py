@@ -113,7 +113,8 @@ class AIOConsole(App):
         ("ctrl+o", "toggle_markdown_focus", "Toggle Focus (Chat/MD)"),
         ("ctrl+l", "clear_log", "Clear Log"),
         ("ctrl+p", "open_palette", "Command Palette"),
-        ("e", "toggle_edit_mode", "Edit MD"),
+        ("e", "edit_markdown", "Edit MD"),
+        ("ctrl+s", "save_markdown", "Save MD"),
     ]
 
     def __init__(self):
@@ -267,25 +268,30 @@ class AIOConsole(App):
                 inp.focus()
         self.push_screen(CommandPalette(tools), on_selected)
 
-    def action_toggle_edit_mode(self) -> None:
+    def action_edit_markdown(self) -> None:
         switcher = self.query_one("#md-view", ContentSwitcher)
-        if not switcher.has_class("-visible"):
+        if not switcher.has_class("-visible") or switcher.current != "md-viewer":
+            return
+            
+        md_editor = self.query_one("#md-editor", TextArea)
+        if self.current_md_path:
+            md_editor.text = self.current_md_path.read_text(encoding="utf-8")
+            switcher.current = "md-editor"
+            md_editor.focus()
+
+    def action_save_markdown(self) -> None:
+        switcher = self.query_one("#md-view", ContentSwitcher)
+        if not switcher.has_class("-visible") or switcher.current != "md-editor":
             return
             
         md_viewer = self.query_one("#md-viewer", Markdown)
         md_editor = self.query_one("#md-editor", TextArea)
         
-        if switcher.current == "md-viewer":
-            if self.current_md_path:
-                md_editor.text = self.current_md_path.read_text(encoding="utf-8")
-                switcher.current = "md-editor"
-                md_editor.focus()
-        else:
-            if self.current_md_path:
-                self.current_md_path.write_text(md_editor.text, encoding="utf-8")
-                md_viewer.update(md_editor.text)
-                switcher.current = "md-viewer"
-                self.query_one("#input", Input).focus()
+        if self.current_md_path:
+            self.current_md_path.write_text(md_editor.text, encoding="utf-8")
+            md_viewer.update(md_editor.text)
+            switcher.current = "md-viewer"
+            self.query_one("#input", Input).focus()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         raw = event.value.strip()
