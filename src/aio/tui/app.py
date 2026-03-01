@@ -10,7 +10,7 @@ import urllib.error
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Header, Footer, Input, Markdown, RichLog
+from textual.widgets import Header, Footer, Input, Markdown, RichLog, ContentSwitcher, TextArea
 
 from aio.agent.executor import AgentExecutor
 from aio.agent.safety import should_block_tool
@@ -21,6 +21,7 @@ from aio.tools.registry import ToolRegistry
 from aio.utils.errors import ToolValidationError
 from aio.workflows.runner import run_workflow
 from aio.llm.router import get_client
+from aio.tui.command_palette import CommandPalette
 
 HELP_TEXT = r"""Commands:
   \help
@@ -62,6 +63,10 @@ class AIOConsole(App):
     #md-view.-visible {
         display: block;
     }
+    #md-viewer, #md-editor {
+        width: 100%;
+        height: 100%;
+    }
     #input {
         dock: bottom;
         margin: 0;
@@ -88,6 +93,8 @@ class AIOConsole(App):
     BINDINGS = [
         ("ctrl+o", "toggle_markdown_focus", "Toggle Focus (Chat/MD)"),
         ("ctrl+l", "clear_log", "Clear Log"),
+        ("ctrl+p", "open_palette", "Command Palette"),
+        ("e", "toggle_edit_mode", "Edit MD"),
     ]
 
     def __init__(self):
@@ -98,14 +105,23 @@ class AIOConsole(App):
         self.registry = ToolRegistry()
         self.executor = AgentExecutor(self.config, self.registry)
         self.command_history: list[str] = []
+        self._history_file = Path(".aio") / "tui_history.json"
+        if self._history_file.exists():
+            try:
+                self.command_history = json.loads(self._history_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
         self.last_response = ""
         self.pending_approval_raw: str | None = None
+        self.current_md_path: Path | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="main-container"):
             yield RichLog(id="chat-log", markup=True, highlight=True)
-            yield Markdown(id="md-view")
+            with ContentSwitcher(initial="md-viewer", id="md-view"):
+                yield Markdown(id="md-viewer")
+                yield TextArea(id="md-editor", language="markdown")
         yield Input(placeholder="cmd> ", id="input")
         yield Footer()
 
@@ -114,18 +130,53 @@ class AIOConsole(App):
         self.sub_title = f"Provider: {self.config.model_provider} • Model: {self.config.model_name}"
         log = self.query_one("#chat-log", RichLog)
         log.write("[bold cyan]AIO Console ready.[/bold cyan] Chat directly, or use [yellow]\\help[/yellow] for commands.")
-        self.query_one("#input", Input).focus()
+        inp = self.query_one("#input", Input)
+        inp.history = self.command_history
+        inp.focus()
 
     def action_toggle_markdown_focus(self) -> None:
-        md_view = self.query_one("#md-view", Markdown)
+        md_view = self.query_one("#md-view", ContentSwitcher)
         inp = self.query_one("#input", Input)
-        if md_view.has_focus:
+        if inp.has_focus:
+            if md_view.has_class("-visible"):
+                if md_view.current == "md-viewer":
+                    self.query_one("#md-viewer", Markdown).focus()
+                else:
+                    self.query_one("#md-editor", TextArea).focus()
+        else:
             inp.focus()
-        elif md_view.has_class("-visible"):
-            md_view.focus()
 
     def action_clear_log(self) -> None:
         self.query_one("#chat-log", RichLog).clear()
+
+    def action_open_palette(self) -> None:
+        tools = self.registry.list_tools()
+        def on_selected(command: str):
+            if command:
+                inp = self.query_one("#input", Input)
+                inp.value = command
+                inp.focus()
+        self.push_screen(CommandPalette(tools), on_selected)
+
+    def action_toggle_edit_mode(self) -> None:
+        switcher = self.query_one("#md-view", ContentSwitcher)
+        if not switcher.has_class("-visible"):
+            return
+            
+        md_viewer = self.query_one("#md-viewer", Markdown)
+        md_editor = self.query_one("#md-editor", TextArea)
+        
+        if switcher.current == "md-viewer":
+            if self.current_md_path:
+                md_editor.text = self.current_md_path.read_text(encoding="utf-8")
+                switcher.current = "md-editor"
+                md_editor.focus()
+        else:
+            if self.current_md_path:
+                self.current_md_path.write_text(md_editor.text, encoding="utf-8")
+                md_viewer.update(md_editor.text)
+                switcher.current = "md-viewer"
+                self.query_one("#input", Input).focus()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         raw = event.value.strip()
@@ -154,6 +205,9 @@ class AIOConsole(App):
 
         log.write(f"> [bold]{raw}[/bold]")
         self.command_history.append(raw)
+        self.query_one("#input", Input).history = self.command_history
+        self._history_file.parent.mkdir(parents=True, exist_ok=True)
+        self._history_file.write_text(json.dumps(self.command_history[-100:]), encoding="utf-8")
         
         if raw.startswith("\\"):
             if raw.startswith("\\md"):
@@ -167,7 +221,8 @@ class AIOConsole(App):
 
     def _handle_markdown_command(self, raw: str) -> None:
         log = self.query_one("#chat-log", RichLog)
-        md_view = self.query_one("#md-view", Markdown)
+        md_viewer = self.query_one("#md-viewer", Markdown)
+        md_view_container = self.query_one("#md-view", ContentSwitcher)
         
         try:
             tokens = shlex.split(raw[1:])
@@ -180,8 +235,9 @@ class AIOConsole(App):
             return
 
         if len(tokens) >= 2 and tokens[1] == "clear":
-            md_view.remove_class("-visible")
-            md_view.update("")
+            md_view_container.remove_class("-visible")
+            md_viewer.update("")
+            self.current_md_path = None
             log.write("Markdown panel cleared.")
             return
 
@@ -193,8 +249,10 @@ class AIOConsole(App):
             stash_text = "# Markdown Stash\n\nUse `\\md open <path>` to view.\n\n"
             for f in md_files:
                 stash_text += f"* `{f}`\n"
-            md_view.update(stash_text)
-            md_view.add_class("-visible")
+            md_viewer.update(stash_text)
+            md_view_container.current = "md-viewer"
+            md_view_container.add_class("-visible")
+            self.current_md_path = None
             return
 
         if len(tokens) >= 3 and tokens[1] == "open":
@@ -204,8 +262,10 @@ class AIOConsole(App):
                     req = urllib.request.Request(path_str, headers={'User-Agent': 'aio-cli'})
                     with urllib.request.urlopen(req, timeout=5) as response:
                         text = response.read().decode('utf-8')
-                    md_view.update(text)
-                    md_view.add_class("-visible")
+                    md_viewer.update(text)
+                    md_view_container.current = "md-viewer"
+                    md_view_container.add_class("-visible")
+                    self.current_md_path = None
                     log.write(f"Markdown loaded from URL: {path_str}")
                 except Exception as e:
                     log.write(f"[red]Failed to fetch {path_str}:[/red] {e}")
@@ -217,8 +277,10 @@ class AIOConsole(App):
                 return
             
             text = path.read_text(encoding="utf-8")
-            md_view.update(text)
-            md_view.add_class("-visible")
+            md_viewer.update(text)
+            md_view_container.current = "md-viewer"
+            md_view_container.add_class("-visible")
+            self.current_md_path = path
             log.write(f"Markdown loaded: {path}")
             return
 
