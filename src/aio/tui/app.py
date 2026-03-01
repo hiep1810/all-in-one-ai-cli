@@ -51,6 +51,7 @@ class AIOConsole(App):
     }
     #main-container {
         layout: horizontal;
+        height: 1fr;
         layer: base;
     }
     #chat-log {
@@ -75,7 +76,7 @@ class AIOConsole(App):
         layer: overlay;
         display: none;
         dock: bottom;
-        margin-bottom: 3;
+        margin-bottom: 4;
         width: 50%;
         max-width: 60;
         max-height: 8;
@@ -87,7 +88,6 @@ class AIOConsole(App):
     }
     #input {
         layer: base;
-        dock: bottom;
         margin: 0;
         border: solid panel;
     }
