@@ -33,6 +33,7 @@ HELP_TEXT = r"""Commands:
   \chat <session> <message>
   \tool <name> [k=v ...] [--approve-risky]
   \tools
+  \git <status|diff|commit|branch> [args]
   \history
   \clear
   \save [path]
@@ -167,7 +168,7 @@ class AIOConsole(App):
         # Build suggester list
         base_cmds = [
             r"\help", r"\clear", r"\history", r"\tools", r"\save ", r"\exit",
-            r"\chat ", r"\agent ", r"\workflow ", r"\config "
+            r"\chat ", r"\agent ", r"\workflow ", r"\config ", r"\git "
         ]
         
         presets = load_connection_presets()
@@ -695,6 +696,33 @@ class AIOConsole(App):
                 self.sub_title = f"Provider: {self.config.model_provider} • Model: {self.config.model_name}"
                 return
             log.write("Usage: \\config show | \\config set <key> <value>")
+            return
+
+        if cmd == "git":
+            if len(tokens) < 2:
+                log.write("Usage: \\git <status|diff|commit|branch> [args]")
+                return
+            subcmd = tokens[1]
+            try:
+                if subcmd == "status":
+                    out = self.registry.run("git.status", path=".")
+                elif subcmd == "diff":
+                    staged = "--staged" in tokens[2:]
+                    out = self.registry.run("git.diff", path=".", staged=staged)
+                elif subcmd == "commit":
+                    msg = " ".join(tokens[2:])
+                    if not msg:
+                        log.write("Usage: \\git commit <message>")
+                        return
+                    out = self.registry.run("git.commit", path=".", message=msg)
+                elif subcmd == "branch":
+                    out = self.registry.run("git.branch", path=".")
+                else:
+                    log.write(f"Unknown git command: {subcmd}")
+                    return
+                log.write(str(out))
+            except ToolValidationError as exc:
+                log.write(f"[red]{exc}[/red]")
             return
 
         log.write(f"Unknown command: {cmd}. Type '\\help'")

@@ -69,6 +69,18 @@ Available MCP tools:
 
 Example MCP client config: [mcp.example.json](/Users/hieptt/Documents/New project/all-in-one-ai-cli/mcp.example.json)
 
+### Recommended External MCPs: Web Search
+
+To give your AI agents the ability to perform deep, intelligent web searches (with full page extraction for ArXiv, GitHub, StackOverflow, etc.), we highly recommend running the **Kindly Web Search MCP**.
+
+**Setup:**
+1. You can run the Kindly MCP directly using `uvx` (no installation required):
+   ```bash
+   uvx kindly-web-search-mcp-server
+   ```
+2. Add this command to your `connections.json` or your preferred MCP Client (such as Claude Desktop or Cursor) to make it available to the AI.
+3. The AI will now have access to tools that actually read and understand websites instead of just scraping raw HTML.
+
 ## Terminal UI
 
 Run:

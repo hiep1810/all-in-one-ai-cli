@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import List
 
 
 def read_text(path: str) -> str:
@@ -12,7 +13,7 @@ def write_text(path: str, content: str) -> str:
     return str(p)
 
 
-def search_text(root: str, query: str) -> list[str]:
+def search_text(root: str, query: str) -> List[str]:
     root_path = Path(root)
     matches: list[str] = []
     for p in root_path.rglob("*"):

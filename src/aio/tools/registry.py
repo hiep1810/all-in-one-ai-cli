@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from aio.tools import filesystem, shell
+from aio.tools import filesystem, shell, git, sql, csv_tools
 from aio.utils.errors import ToolValidationError
 
 ToolFn = Callable[..., object]
@@ -21,12 +21,24 @@ class ToolRegistry:
             "fs.write": filesystem.write_text,
             "fs.search": filesystem.search_text,
             "shell.exec": shell.exec_cmd,
+            "git.status": git.git_status,
+            "git.diff": git.git_diff,
+            "git.commit": git.git_commit_draft,
+            "git.branch": git.git_branch_summary,
+            "sql.query": sql.query_sqlite,
+            "csv.query": csv_tools.query_csv,
         }
         self._schemas: dict[str, list[ToolArgSpec]] = {
             "fs.read": [ToolArgSpec("path", str)],
             "fs.write": [ToolArgSpec("path", str), ToolArgSpec("content", str)],
             "fs.search": [ToolArgSpec("root", str), ToolArgSpec("query", str)],
             "shell.exec": [ToolArgSpec("cmd", str)],
+            "git.status": [ToolArgSpec("path", str)],
+            "git.diff": [ToolArgSpec("path", str), ToolArgSpec("staged", bool, required=False)],
+            "git.commit": [ToolArgSpec("path", str), ToolArgSpec("message", str)],
+            "git.branch": [ToolArgSpec("path", str)],
+            "sql.query": [ToolArgSpec("db_path", str), ToolArgSpec("query", str)],
+            "csv.query": [ToolArgSpec("file_path", str), ToolArgSpec("columns", list, required=False)],
         }
 
     def list_tools(self) -> list[str]:
