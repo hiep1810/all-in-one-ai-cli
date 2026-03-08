@@ -1,0 +1,17 @@
+{
+    "llama.cpp": {
+        "url": "http://192.168.1.11:8080",
+        "provider": "llama_cpp",
+        "default_model": "local-model"
+    },
+    "lmstudio": {
+        "url": "http://127.0.0.1:1234",
+        "provider": "llama_cpp",
+        "default_model": "local-model"
+    },
+    "ollama": {
+        "url": "http://127.0.0.1:11434",
+        "provider": "llama_cpp",
+        "default_model": "llama3"
+    }
+}
