@@ -17,6 +17,7 @@ from aio.agent.safety import should_block_tool
 from aio.config.loader import config_to_dict, load_config, update_config, save_config
 from aio.config.connections import load_connection_presets
 from aio.logging.audit import AuditLogger
+from aio.memory.context import append_memory, load_project_context
 from aio.memory.session_store import SessionStore
 from aio.tools.registry import ToolRegistry
 from aio.utils.errors import ToolValidationError
@@ -26,6 +27,9 @@ from aio.tui.command_palette import CommandPalette
 
 HELP_TEXT = r"""Commands:
   \help
+  \memory show
+  \memory add <text>
+  \memory refresh
   \md open <path|url>
   \md stash
   \md clear
@@ -144,6 +148,13 @@ class AIOConsole(App):
         self.pending_approval_raw: str | None = None
         self.current_md_path: Path | None = None
         self.history_index: int = 0
+        # Load the project context once at startup.
+        # Tradeoff: Reading the file on every single prompt would guarantee the freshest context
+        # at all times, but constantly re-reading from disk can be slow and blocking on the main thread.
+        # Storing it in memory (caching) is much faster. To balance this, we provide `\memory refresh`
+        # strictly for manual syncs if the user modifies the file outside the CLI.
+        # This becomes the system prompt for every AI call in this session.
+        self.project_context: str = load_project_context(Path.cwd())
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -168,7 +179,8 @@ class AIOConsole(App):
         # Build suggester list
         base_cmds = [
             r"\help", r"\clear", r"\history", r"\tools", r"\save ", r"\exit",
-            r"\chat ", r"\agent ", r"\workflow ", r"\config ", r"\git "
+            r"\chat ", r"\agent ", r"\workflow ", r"\config ", r"\git ",
+            r"\memory show", r"\memory add ", r"\memory refresh",
         ]
         
         presets = load_connection_presets()
@@ -477,7 +489,9 @@ class AIOConsole(App):
         import time
         start_time = time.time()
         try:
-            result = client.complete(prompt)
+            # Pass the loaded project context as a system prompt.
+            # The AI will treat this as standing instructions for the session.
+            result = client.complete(prompt, system_prompt=self.project_context)
             elapsed = time.time() - start_time
             # Rough token estimate: ~4 chars per token
             token_count = len(str(result)) // 4
@@ -530,6 +544,41 @@ class AIOConsole(App):
 
         if cmd in {"help", "?"}:
             log.write(HELP_TEXT.strip())
+            return
+
+        if cmd == "memory":
+            sub = tokens[1] if len(tokens) > 1 else ""
+
+            if sub == "show":
+                # Display what context the AI is currently working with
+                if self.project_context:
+                    log.write(f"[bold cyan]Project context:[/bold cyan]\n{self.project_context}")
+                else:
+                    log.write("[dim]No context loaded. Create .aio/context.md to add one.[/dim]")
+                return
+
+            if sub == "add":
+                # Append the rest of the tokens as a new fact
+                if len(tokens) < 3:
+                    log.write("Usage: \\memory add <text>")
+                    return
+                fact = " ".join(tokens[2:])
+                ctx_path = append_memory(fact, project_root=Path.cwd())
+                # Reload context so the new fact is active immediately
+                self.project_context = load_project_context(Path.cwd())
+                log.write(f"[green]Memory saved to {ctx_path}[/green]: {fact}")
+                return
+
+            if sub == "refresh":
+                # Re-read context.md from disk without restarting the TUI
+                self.project_context = load_project_context(Path.cwd())
+                if self.project_context:
+                    log.write(f"[green]Context refreshed.[/green] {len(self.project_context)} chars loaded.")
+                else:
+                    log.write("[dim]Context refreshed — no context.md found.[/dim]")
+                return
+
+            log.write("Usage: \\memory show | \\memory add <text> | \\memory refresh")
             return
 
         if cmd in {"exit", "quit"}:

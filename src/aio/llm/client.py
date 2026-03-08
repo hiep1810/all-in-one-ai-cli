@@ -11,17 +11,19 @@ class LLMClient:
     def __init__(self, config: Config):
         self.config = config
 
-    def complete(self, prompt: str) -> str:
+    def complete(self, prompt: str, system_prompt: str = "") -> str:
         # V1 scaffold returns deterministic mock output.
+        # system_prompt is accepted but intentionally ignored in the mock
+        # so tests don't need to change when the real client is swapped in.
         return f"[{self.config.model_provider}/{self.config.model_name}] {prompt}"
 
-    def stream_complete(self, prompt: str) -> Iterator[str]:
-        yield self.complete(prompt)
+    def stream_complete(self, prompt: str, system_prompt: str = "") -> Iterator[str]:
+        yield self.complete(prompt, system_prompt=system_prompt)
 
 
 class LlamaCppClient(LLMClient):
-    def complete(self, prompt: str) -> str:
-        payload = self._payload(prompt, stream=False)
+    def complete(self, prompt: str, system_prompt: str = "") -> str:
+        payload = self._payload(prompt, stream=False, system_prompt=system_prompt)
         parsed = self._post_json(payload)
 
         try:
@@ -31,8 +33,8 @@ class LlamaCppClient(LLMClient):
                 "Unexpected llama.cpp response format from /v1/chat/completions"
             ) from exc
 
-    def stream_complete(self, prompt: str) -> Iterator[str]:
-        payload = self._payload(prompt, stream=True)
+    def stream_complete(self, prompt: str, system_prompt: str = "") -> Iterator[str]:
+        payload = self._payload(prompt, stream=True, system_prompt=system_prompt)
         url = self.config.model_base_url.rstrip("/") + "/v1/chat/completions"
         body = json.dumps(payload).encode("utf-8")
         req = request.Request(
@@ -59,10 +61,23 @@ class LlamaCppClient(LLMClient):
                 f"base_url={self.config.model_base_url}"
             ) from exc
 
-    def _payload(self, prompt: str, stream: bool) -> dict[str, object]:
+    def _payload(self, prompt: str, stream: bool, system_prompt: str = "") -> dict[str, object]:
+        # Build the messages list. The system role comes first (if any),
+        # followed by the user turn.
+        # Why a list of dictionaries? This {"role": ..., "content": ...} structure
+        # is the industry standard (OpenAI format). By standardizing on this data
+        # structure, switching between OpenAI, Anthropic, llama.cpp, and vLLM
+        # becomes trivially easy without rewriting the core engine.
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            # Junior tip: The "system" role is like standing orders for the AI.
+            # It sets boundaries, personas, and persistent context which the AI
+            # will always respect but usually won't explicitly reply to.
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         payload = {
             "model": self.config.model_name,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": 0.2,
             "stream": stream,
         }
